@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>小白的搜索</title>
+	<link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+	<!-- inified CSS -->
+	<link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" href="index.css">
+	<script src="./javascript/js.cookie.min.js"></script>
+	<script src="./javascript/index.js"></script>
+</head>
+
+<body>
+	<!-- 背景图像 -->
+	<article class="bg">
+		<img src="./images/bg.jpg" alt="我是背景" class="img-responsive">
+	</article>
+
+	<!-- 上层布局 -->
+	<div class="container">
+		<!-- 搜索的添加 -->
+		<div class="row">
+			<div class="search col-xs-12 col-sm-12 col-md-6">
+				<div class="location">
+					<label for="search_target"></label>
+					<input type="text" id="search_target" autofocus placeholder="search">
+				</div>
+			</div>
+
+			<!-- 快捷方式的添加 -->
+			<div class="icos col-xs-12 col-sm-12 col-md-6">
+				<nav class="container">
+					<div class="row padBut30">
+						<ul class="col-xs-12 col-sm-12 col-md-12">
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://www.runoob.com/"><span>菜鸟教程</span></a>
+							</li>
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://github.com/"><span>我的github</span></a>
+							</li>
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://key-sqc.github.io"><span>我的网站</span></a>
+							</li>
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://fanyi.baidu.com/"><span>翻译</span></a>
+							</li>
+						</ul>
+					</div>
+
+					<div class="row padBut30">
+						<ul class="col-xs-12 col-sm-12 col-md-12">
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://www.google.com/"><span>谷歌搜索</span></a>
+							</li>
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://www.wikipedia.org/"><span>维基百科</span></a>
+							</li>
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://mail.qq.com/"><span>qq邮箱</span></a>
+							</li>
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://docschina.org/"><span>印记中文</span></a>
+							</li>
+						</ul>
+					</div>
+
+					<div class="row padBut30">
+						<ul class="col-xs-12 col-sm-12 col-md-12">
+							<li class="col-xs-6 col-sm-3 col-md-3">
+								<a href="https://www.bilibili.com/"><span>谷歌搜索</span></a>
+							</li>
+						</ul>
+					</div>
+				</nav>
+			</div>
+		</div>
+	</div>
+
+	<!-- 待办事项 -->
+	<div class="container hidden-xs">
+		<div class="row">
+			<article class="daiban col-xs-12 col-sm-12 col-md-6">
+				<div class="btn">
+					<button class="addBtn">+</button>
+					<button class="remBtn">-</button>
+				</div>
+
+				<div class="addP">
+
+				</div>
+			</article>
+		</div>
+	</div>
+
+	<!-- 切换壁纸图标 -->
+	<article class="target">
+		<button></button>
+	</article>
+
+</body>
+
+</html>
