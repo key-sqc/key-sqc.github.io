@@ -10,7 +10,10 @@ window.onload = function () {
 			if (e.keyCode === 13) {
 
 				//  搜索接口 http://www.baidu.com/s?wd=关键字
-				window.open(`http://www.baidu.com/s?wd=${search.value}`);
+				// window.open(`http://www.baidu.com/s?wd=${search.value}`);
+
+				// https://fsou.cc/search?tbn=all&q=%E4%BD%A0%E5%A5%BD
+				window.open(`https://fsou.cc/search?tbn=all&q=${search.value}`);
 
 				// 清除输入框
 				search.value = ' ';
@@ -62,7 +65,7 @@ window.onload = function () {
 
 				// 添加数据
 				// localStorage.setItem(p.count, person);
-				Cookies.set(p.count, person, { path: '/'});
+				Cookies.set(p.count, person, { path: '/' });
 
 				// 将localStorage 中的内容填充进p标签中
 				// let getItem = localStorage.getItem(p.count);
