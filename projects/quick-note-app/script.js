@@ -6,7 +6,6 @@ class QuickNoteApp {
         this.historyList = document.getElementById('historyList');
         this.togglePageBtn = document.getElementById('togglePageBtn');
         this.saveBtn = document.getElementById('saveBtn');
-        this.bottomActions = document.querySelector('.bottom-actions');
         
         this.CURRENT_NOTE_KEY = 'currentNote';
         this.HISTORY_KEY = 'noteHistory';
@@ -21,9 +20,6 @@ class QuickNoteApp {
     }
     
     init() {
-        // 首先调整布局高度
-        this.adjustLayoutForApp();
-        
         // 加载当前编辑内容和历史记录
         this.loadCurrentNote();
         this.loadHistory();
@@ -44,36 +40,7 @@ class QuickNoteApp {
         
         window.addEventListener('beforeunload', () => this.saveOnLeave());
         
-        // 监听窗口大小变化
-        window.addEventListener('resize', () => {
-            this.adjustLayoutForApp();
-        });
-        
         console.log('便签应用已初始化');
-    }
-    
-    adjustLayoutForApp() {
-        // 获取可视区域高度
-        const visualViewport = window.visualViewport || window;
-        const windowHeight = visualViewport.height;
-        const documentHeight = document.documentElement.clientHeight;
-        
-        console.log('窗口高度:', windowHeight, '文档高度:', documentHeight);
-        
-        // 计算底部按钮区域的高度
-        const bottomActionsHeight = this.bottomActions.offsetHeight;
-        
-        // 设置页面内容高度
-        const contentHeight = windowHeight - bottomActionsHeight;
-        
-        // 应用高度到页面
-        this.editorPage.style.height = contentHeight + 'px';
-        this.historyPage.style.height = contentHeight + 'px';
-        
-        console.log('内容区域高度:', contentHeight, '按钮高度:', bottomActionsHeight);
-        
-        // 确保按钮在底部可见
-        this.bottomActions.style.bottom = '0';
     }
     
     autoFocus() {

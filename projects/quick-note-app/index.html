@@ -5,16 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>便签</title>
     <link rel="stylesheet" href="style.css">
-    <style>
-        /* 防止移动端浏览器工具栏影响布局 */
-        @supports (padding: max(0px)) {
-            .bottom-actions {
-                padding-bottom: max(15px, env(safe-area-inset-bottom));
-            }
-        }
-    </style>
 </head>
 <body>
+    <!-- 顶部操作按钮 -->
+    <div class="top-actions">
+        <button class="action-btn history" id="togglePageBtn">灵感</button>
+        <button class="action-btn" id="saveBtn">保存</button>
+    </div>
+
     <div class="container">
         <!-- 输入框页面 -->
         <div class="editor-page" id="editorPage">
@@ -32,12 +30,6 @@
             </div>
             <div id="historyList" class="history-list"></div>
         </div>
-    </div>
-
-    <!-- 底部操作按钮 -->
-    <div class="bottom-actions">
-        <button class="action-btn history" id="togglePageBtn">灵感</button>
-        <button class="action-btn" id="saveBtn">保存</button>
     </div>
 
     <script src="script.js"></script>
