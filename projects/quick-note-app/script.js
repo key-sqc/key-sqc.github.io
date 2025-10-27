@@ -65,7 +65,7 @@ class QuickNoteApp {
     showEditorPage() {
         this.editorPage.classList.remove('hidden');
         this.editorPage.classList.add('sliding-down');
-        this.togglePageBtn.textContent = '历史';
+        this.togglePageBtn.textContent = '灵感';
         this.isHistoryVisible = false;
         
         // 动画结束后移除动画类
@@ -102,7 +102,7 @@ class QuickNoteApp {
         
         setTimeout(() => {
             this.saveBtn.textContent = originalText;
-            this.saveBtn.style.background = '#1890ff';
+            this.saveBtn.style.background = '#007bff';
         }, 1500);
     }
     
@@ -129,7 +129,7 @@ class QuickNoteApp {
     
     renderHistory(historyArray) {
         if (historyArray.length === 0) {
-            this.historyList.innerHTML = '<div class="empty-state">暂无历史记录</div>';
+            this.historyList.innerHTML = '<div class="empty-state">暂无灵感记录</div>';
             return;
         }
         
@@ -264,7 +264,7 @@ class QuickNoteApp {
                     content: content,
                     timestamp: Date.now()
                 };
-                console.log('已更新历史记录');
+                console.log('已更新记录');
             } else {
                 const newRecord = {
                     content: content,
