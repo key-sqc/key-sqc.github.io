@@ -2,9 +2,17 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>便签</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* 防止移动端浏览器工具栏影响布局 */
+        @supports (padding: max(0px)) {
+            .bottom-actions {
+                padding-bottom: max(15px, env(safe-area-inset-bottom));
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="container">
