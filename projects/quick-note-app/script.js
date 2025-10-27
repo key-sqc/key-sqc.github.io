@@ -26,21 +26,56 @@ class QuickNoteApp {
         this.clearBtn.addEventListener('click', () => this.clearNote());
         this.saveBtn.addEventListener('click', () => this.saveNote());
         
+        // 自动聚焦并弹出键盘
+        this.autoFocus();
+        
         // 页面可见性变化时保存（切换应用时）
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.saveNote();
+            } else {
+                // 当页面重新可见时，重新聚焦
+                setTimeout(() => this.noteArea.focus(), 100);
             }
         });
         
         // 页面卸载前保存
         window.addEventListener('beforeunload', () => this.saveNote());
         
+        // 点击页面任意位置都聚焦到输入框
+        document.addEventListener('click', (e) => {
+            if (e.target !== this.noteArea && e.target !== this.clearBtn && e.target !== this.saveBtn) {
+                this.noteArea.focus();
+            }
+        });
+        
         // 初始化统计
         this.updateStats();
         this.updateStatus('应用已就绪', 'success');
         
         console.log('快速便签应用已初始化');
+    }
+    
+    autoFocus() {
+        // 延迟聚焦确保页面完全加载
+        setTimeout(() => {
+            this.noteArea.focus();
+            
+            // 移动端特殊处理：尝试触发键盘
+            if ('virtualKeyboard' in navigator) {
+                // 新的虚拟键盘API
+                navigator.virtualKeyboard.show();
+            }
+            
+            // 强制滚动到输入框（移动端优化）
+            this.noteArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // 设置光标到文本末尾
+            const length = this.noteArea.value.length;
+            this.noteArea.setSelectionRange(length, length);
+            
+            console.log('输入框已自动聚焦');
+        }, 300); // 适当延迟确保页面渲染完成
     }
     
     loadNote() {
@@ -92,7 +127,9 @@ class QuickNoteApp {
         localStorage.removeItem(this.STORAGE_KEY);
         this.updateStats();
         this.updateStatus('内容已清空', 'info');
-        this.noteArea.focus();
+        
+        // 清空后重新聚焦
+        setTimeout(() => this.noteArea.focus(), 100);
     }
     
     updateStats() {
@@ -121,10 +158,24 @@ document.addEventListener('DOMContentLoaded', () => {
     new QuickNoteApp();
 });
 
-// 添加服务工作者支持（PWA功能）
+// 添加页面加载完成的额外聚焦保障
+window.addEventListener('load', () => {
+    // 双重保障：确保页面完全加载后再次聚焦
+    setTimeout(() => {
+        const noteArea = document.getElementById('noteArea');
+        if (noteArea) {
+            noteArea.focus();
+            
+            // 移动端：尝试通过点击事件触发键盘
+            const event = new Event('touchstart', { bubbles: true });
+            noteArea.dispatchEvent(event);
+        }
+    }, 500);
+});
+
+// 服务工作者支持（PWA功能）
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', function() {
-        // 简单的服务工作者缓存
         const cacheName = 'quick-note-v1';
         const filesToCache = [
             './',
@@ -133,7 +184,6 @@ if ('serviceWorker' in navigator) {
             './script.js'
         ];
         
-        // 创建简单的缓存逻辑
         caches.open(cacheName).then(function(cache) {
             return cache.addAll(filesToCache);
         }).catch(function(error) {
