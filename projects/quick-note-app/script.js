@@ -1,193 +1,349 @@
 class QuickNoteApp {
     constructor() {
         this.noteArea = document.getElementById('noteArea');
-        this.status = document.getElementById('status');
-        this.clearBtn = document.getElementById('clearBtn');
+        this.editorPage = document.getElementById('editorPage');
+        this.historyPage = document.getElementById('historyPage');
+        this.historyList = document.getElementById('historyList');
+        this.togglePageBtn = document.getElementById('togglePageBtn');
         this.saveBtn = document.getElementById('saveBtn');
-        this.charCount = document.getElementById('charCount');
-        this.wordCount = document.getElementById('wordCount');
         
-        this.STORAGE_KEY = 'quickNoteData';
-        this.autoSaveTimer = null;
+        this.CURRENT_NOTE_KEY = 'currentNote';
+        this.HISTORY_KEY = 'noteHistory';
+        this.editingIndex = null;
+        this.isHistoryVisible = false;
+        
+        // 滑动删除相关变量
+        this.touchStartX = 0;
+        this.isSwiping = false;
+        this.swipeThreshold = 60;
         
         this.init();
     }
     
     init() {
-        // 加载保存的内容
-        this.loadNote();
+        // 加载当前编辑内容和历史记录
+        this.loadCurrentNote();
+        this.loadHistory();
         
         // 绑定事件
-        this.noteArea.addEventListener('input', () => {
-            this.updateStats();
-            this.autoSave();
-        });
+        this.togglePageBtn.addEventListener('click', () => this.togglePage());
+        this.saveBtn.addEventListener('click', () => this.saveNow());
         
-        this.clearBtn.addEventListener('click', () => this.clearNote());
-        this.saveBtn.addEventListener('click', () => this.saveNote());
-        
-        // 自动聚焦并弹出键盘
+        // 自动聚焦
         this.autoFocus();
         
-        // 页面可见性变化时保存（切换应用时）
+        // 页面事件监听
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
-                this.saveNote();
-            } else {
-                // 当页面重新可见时，重新聚焦
-                setTimeout(() => this.noteArea.focus(), 100);
+                this.saveOnLeave();
             }
         });
         
-        // 页面卸载前保存
-        window.addEventListener('beforeunload', () => this.saveNote());
+        window.addEventListener('beforeunload', () => this.saveOnLeave());
         
-        // 点击页面任意位置都聚焦到输入框
-        document.addEventListener('click', (e) => {
-            if (e.target !== this.noteArea && e.target !== this.clearBtn && e.target !== this.saveBtn) {
-                this.noteArea.focus();
-            }
-        });
-        
-        // 初始化统计
-        this.updateStats();
-        this.updateStatus('应用已就绪', 'success');
-        
-        console.log('快速便签应用已初始化');
+        console.log('便签应用已初始化');
     }
     
     autoFocus() {
-        // 延迟聚焦确保页面完全加载
         setTimeout(() => {
             this.noteArea.focus();
-            
-            // 移动端特殊处理：尝试触发键盘
-            if ('virtualKeyboard' in navigator) {
-                // 新的虚拟键盘API
-                navigator.virtualKeyboard.show();
-            }
-            
-            // 强制滚动到输入框（移动端优化）
-            this.noteArea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // 设置光标到文本末尾
             const length = this.noteArea.value.length;
             this.noteArea.setSelectionRange(length, length);
-            
-            console.log('输入框已自动聚焦');
-        }, 300); // 适当延迟确保页面渲染完成
+        }, 400);
     }
     
-    loadNote() {
+    togglePage() {
+        if (this.isHistoryVisible) {
+            // 切换到输入页面
+            this.showEditorPage();
+        } else {
+            // 切换到历史页面
+            this.showHistoryPage();
+        }
+    }
+    
+    showEditorPage() {
+        this.editorPage.classList.remove('hidden');
+        this.editorPage.classList.add('sliding-down');
+        this.togglePageBtn.textContent = '历史';
+        this.isHistoryVisible = false;
+        
+        // 动画结束后移除动画类
+        setTimeout(() => {
+            this.editorPage.classList.remove('sliding-down');
+            this.noteArea.focus();
+        }, 400);
+    }
+    
+    showHistoryPage() {
+        this.editorPage.classList.add('sliding-up');
+        this.togglePageBtn.textContent = '返回';
+        this.isHistoryVisible = true;
+        
+        // 动画结束后隐藏输入页面
+        setTimeout(() => {
+            this.editorPage.classList.add('hidden');
+            this.editorPage.classList.remove('sliding-up');
+        }, 400);
+    }
+    
+    saveNow() {
+        const content = this.noteArea.value.trim();
+        if (content) {
+            this.saveOnLeave();
+            this.showSaveFeedback();
+        }
+    }
+    
+    showSaveFeedback() {
+        const originalText = this.saveBtn.textContent;
+        this.saveBtn.textContent = '已保存';
+        this.saveBtn.style.background = '#52c41a';
+        
+        setTimeout(() => {
+            this.saveBtn.textContent = originalText;
+            this.saveBtn.style.background = '#1890ff';
+        }, 1500);
+    }
+    
+    loadCurrentNote() {
         try {
-            const saved = localStorage.getItem(this.STORAGE_KEY);
-            if (saved) {
-                this.noteArea.value = saved;
-                this.updateStatus('已加载保存的内容', 'success');
+            const current = localStorage.getItem(this.CURRENT_NOTE_KEY);
+            if (current) {
+                this.noteArea.value = current;
             }
         } catch (error) {
-            this.updateStatus('加载失败', 'error');
-            console.error('加载错误:', error);
+            console.error('加载当前内容失败:', error);
         }
     }
     
-    saveNote() {
+    loadHistory() {
         try {
-            const content = this.noteArea.value;
-            localStorage.setItem(this.STORAGE_KEY, content);
-            this.updateStatus(`已保存 ${new Date().toLocaleTimeString()}`, 'success');
-            return true;
+            const history = localStorage.getItem(this.HISTORY_KEY);
+            const historyArray = history ? JSON.parse(history) : [];
+            this.renderHistory(historyArray);
         } catch (error) {
-            this.updateStatus('保存失败', 'error');
-            console.error('保存错误:', error);
-            return false;
+            console.error('加载历史记录失败:', error);
         }
     }
     
-    autoSave() {
-        // 清除之前的定时器
-        if (this.autoSaveTimer) {
-            clearTimeout(this.autoSaveTimer);
-        }
-        
-        this.updateStatus('正在保存...', 'info');
-        
-        // 设置新的定时器（2秒后保存）
-        this.autoSaveTimer = setTimeout(() => {
-            this.saveNote();
-        }, 2000);
-    }
-    
-    clearNote() {
-        if (this.noteArea.value && !confirm('确定要清空所有内容吗？此操作不可撤销。')) {
+    renderHistory(historyArray) {
+        if (historyArray.length === 0) {
+            this.historyList.innerHTML = '<div class="empty-state">暂无历史记录</div>';
             return;
         }
         
-        this.noteArea.value = '';
-        localStorage.removeItem(this.STORAGE_KEY);
-        this.updateStats();
-        this.updateStatus('内容已清空', 'info');
+        this.historyList.innerHTML = historyArray.map((item, index) => `
+            <div class="history-item ${index === this.editingIndex ? 'active' : ''}" data-index="${index}">
+                <div class="history-content">${this.escapeHtml(item.content)}</div>
+                <div class="history-time">${this.formatTime(item.timestamp)}</div>
+                <div class="delete-hint">删除</div>
+            </div>
+        `).join('');
         
-        // 清空后重新聚焦
-        setTimeout(() => this.noteArea.focus(), 100);
+        // 添加触摸事件
+        this.addSwipeEvents();
     }
     
-    updateStats() {
-        const content = this.noteArea.value;
-        const chars = content.length;
-        const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+    addSwipeEvents() {
+        const items = this.historyList.querySelectorAll('.history-item');
         
-        this.charCount.textContent = chars;
-        this.wordCount.textContent = words;
+        items.forEach(item => {
+            let startX = 0;
+            let currentX = 0;
+            let isSwiping = false;
+            
+            const onTouchStart = (e) => {
+                startX = e.touches[0].clientX;
+                currentX = startX;
+                isSwiping = false;
+                item.classList.remove('swiping');
+            };
+            
+            const onTouchMove = (e) => {
+                if (!startX) return;
+                
+                currentX = e.touches[0].clientX;
+                const diffX = startX - currentX;
+                
+                if (Math.abs(diffX) > 10) {
+                    e.preventDefault();
+                    isSwiping = true;
+                    
+                    if (diffX > 0) {
+                        const translateX = Math.min(diffX, 100);
+                        item.style.transform = `translateX(-${translateX}px)`;
+                        
+                        if (diffX > this.swipeThreshold) {
+                            item.classList.add('swiping');
+                        } else {
+                            item.classList.remove('swiping');
+                        }
+                    }
+                }
+            };
+            
+            const onTouchEnd = (e) => {
+                if (!startX) return;
+                
+                const diffX = startX - currentX;
+                
+                if (isSwiping && diffX > this.swipeThreshold) {
+                    this.deleteHistoryItemWithAnimation(item);
+                } else {
+                    item.style.transform = 'translateX(0)';
+                    item.classList.remove('swiping');
+                    
+                    if (!isSwiping) {
+                        const index = parseInt(item.dataset.index);
+                        this.startEditingHistory(index);
+                    }
+                }
+                
+                startX = 0;
+                isSwiping = false;
+            };
+            
+            item.addEventListener('touchstart', onTouchStart, { passive: true });
+            item.addEventListener('touchmove', onTouchMove, { passive: false });
+            item.addEventListener('touchend', onTouchEnd, { passive: true });
+        });
     }
     
-    updateStatus(message, type = 'info') {
-        const colors = {
-            success: '#4CAF50',
-            error: '#ff6b6b', 
-            info: '#2196F3'
-        };
+    deleteHistoryItemWithAnimation(item) {
+        const index = parseInt(item.dataset.index);
         
-        this.status.textContent = message;
-        this.status.style.color = colors[type] || colors.info;
+        item.classList.add('deleting');
+        
+        setTimeout(() => {
+            this.deleteHistoryItem(index);
+        }, 300);
+    }
+    
+    startEditingHistory(index) {
+        try {
+            const history = localStorage.getItem(this.HISTORY_KEY);
+            const historyArray = history ? JSON.parse(history) : [];
+            
+            if (historyArray[index]) {
+                const item = historyArray[index];
+                
+                this.noteArea.value = item.content;
+                this.editingIndex = index;
+                this.saveCurrentNote();
+                
+                // 切换回输入页面
+                this.showEditorPage();
+                
+                this.renderHistory(historyArray);
+            }
+        } catch (error) {
+            console.error('加载历史记录项失败:', error);
+        }
+    }
+    
+    saveCurrentNote() {
+        try {
+            const content = this.noteArea.value;
+            localStorage.setItem(this.CURRENT_NOTE_KEY, content);
+        } catch (error) {
+            console.error('保存当前内容失败:', error);
+        }
+    }
+    
+    saveOnLeave() {
+        const content = this.noteArea.value.trim();
+        if (!content) return;
+        
+        try {
+            const history = localStorage.getItem(this.HISTORY_KEY);
+            const historyArray = history ? JSON.parse(history) : [];
+            
+            if (this.editingIndex !== null) {
+                historyArray[this.editingIndex] = {
+                    content: content,
+                    timestamp: Date.now()
+                };
+                console.log('已更新历史记录');
+            } else {
+                const newRecord = {
+                    content: content,
+                    timestamp: Date.now()
+                };
+                
+                historyArray.unshift(newRecord);
+                
+                if (historyArray.length > 50) {
+                    historyArray.splice(50);
+                }
+                console.log('已创建新记录');
+            }
+            
+            localStorage.setItem(this.HISTORY_KEY, JSON.stringify(historyArray));
+            
+            this.noteArea.value = '';
+            this.editingIndex = null;
+            this.saveCurrentNote();
+            
+            this.renderHistory(historyArray);
+            
+        } catch (error) {
+            console.error('保存内容失败:', error);
+        }
+    }
+    
+    deleteHistoryItem(index) {
+        try {
+            const history = localStorage.getItem(this.HISTORY_KEY);
+            const historyArray = history ? JSON.parse(history) : [];
+            
+            historyArray.splice(index, 1);
+            
+            localStorage.setItem(this.HISTORY_KEY, JSON.stringify(historyArray));
+            
+            if (this.editingIndex === index) {
+                this.noteArea.value = '';
+                this.editingIndex = null;
+                this.saveCurrentNote();
+            } else if (this.editingIndex > index) {
+                this.editingIndex--;
+            }
+            
+            this.renderHistory(historyArray);
+            
+            console.log('已删除记录');
+        } catch (error) {
+            console.error('删除记录失败:', error);
+        }
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    formatTime(timestamp) {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diff = now - date;
+        
+        if (diff < 60000) {
+            return '刚刚';
+        } else if (diff < 3600000) {
+            return `${Math.floor(diff / 60000)}分钟前`;
+        } else if (diff < 86400000) {
+            return `${Math.floor(diff / 3600000)}小时前`;
+        } else {
+            return date.toLocaleDateString();
+        }
     }
 }
+
+// 全局实例
+let app;
 
 // 初始化应用
 document.addEventListener('DOMContentLoaded', () => {
-    new QuickNoteApp();
+    app = new QuickNoteApp();
 });
-
-// 添加页面加载完成的额外聚焦保障
-window.addEventListener('load', () => {
-    // 双重保障：确保页面完全加载后再次聚焦
-    setTimeout(() => {
-        const noteArea = document.getElementById('noteArea');
-        if (noteArea) {
-            noteArea.focus();
-            
-            // 移动端：尝试通过点击事件触发键盘
-            const event = new Event('touchstart', { bubbles: true });
-            noteArea.dispatchEvent(event);
-        }
-    }, 500);
-});
-
-// 服务工作者支持（PWA功能）
-if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-        const cacheName = 'quick-note-v1';
-        const filesToCache = [
-            './',
-            './index.html',
-            './style.css',
-            './script.js'
-        ];
-        
-        caches.open(cacheName).then(function(cache) {
-            return cache.addAll(filesToCache);
-        }).catch(function(error) {
-            console.log('缓存失败:', error);
-        });
-    });
-}

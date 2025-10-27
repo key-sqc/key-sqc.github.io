@@ -3,36 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>📝 快速便签</title>
+    <title>便签</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="manifest" href="manifest.json">
 </head>
 <body>
     <div class="container">
-        <header class="header">
-            <h1>📝 我的便签</h1>
-            <p class="subtitle">输入内容自动保存 · 完全离线使用</p>
-        </header>
-        
-        <main class="main-content">
+        <!-- 输入框页面 -->
+        <div class="editor-page" id="editorPage">
             <textarea 
                 id="noteArea" 
                 class="note-area" 
-                placeholder="开始记录您的想法、待办事项或任何内容...
-                
-💡 提示：内容会自动保存，无需手动操作"
+                placeholder="开始记录您的想法..."
             ></textarea>
-            
-            <div class="toolbar">
-                <button id="clearBtn" class="btn btn-secondary">清空内容</button>
-                <span id="status" class="status">就绪</span>
-                <button id="saveBtn" class="btn btn-primary">手动保存</button>
-            </div>
-        </main>
+        </div>
         
-        <footer class="footer">
-            <p>便签数据存储在您的浏览器中，完全私密安全</p>
-        </footer>
+        <!-- 历史记录页面 -->
+        <div class="history-page" id="historyPage">
+            <div class="history-header">
+                <h1>历史记录</h1>
+            </div>
+            <div id="historyList" class="history-list"></div>
+        </div>
+    </div>
+
+    <!-- 底部操作按钮 -->
+    <div class="bottom-actions">
+        <button class="action-btn history" id="togglePageBtn">历史</button>
+        <button class="action-btn" id="saveBtn">保存</button>
     </div>
 
     <script src="script.js"></script>
