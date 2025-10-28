@@ -111,6 +111,36 @@ button:disabled {
     border-radius: 8px;
 }
 
+.signaling-status {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+#signaling-log {
+    height: 100px;
+    overflow-y: auto;
+    font-family: monospace;
+    font-size: 0.8rem;
+    background: white;
+    padding: 10px;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+.log-entry {
+    margin-bottom: 5px;
+    padding: 2px 5px;
+    border-radius: 3px;
+}
+
+.log-info { background: #e3f2fd; }
+.log-success { background: #e8f5e8; color: #2e7d32; }
+.log-warning { background: #fff3e0; color: #ef6c00; }
+.log-error { background: #ffebee; color: #c62828; }
+
 .chat-header {
     display: flex;
     justify-content: space-between;
@@ -147,6 +177,12 @@ button:disabled {
     background: #4299e1;
     color: white;
     margin-left: auto;
+}
+
+.message-time {
+    font-size: 0.7rem;
+    opacity: 0.7;
+    margin-top: 5px;
 }
 
 .message-input {
