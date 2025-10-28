@@ -13,7 +13,27 @@
             <p>点对点加密聊天 · 无需服务器</p>
         </div>
         
-        <div class="connection-panel">
+        <!-- 使用说明面板 -->
+        <div class="instructions-panel" id="instructionsPanel">
+            <h3>📱 使用说明</h3>
+            <div class="steps">
+                <div class="step">
+                    <span class="step-number">1</span>
+                    <span class="step-text">一方点击"创建房间"生成4位房间号</span>
+                </div>
+                <div class="step">
+                    <span class="step-number">2</span>
+                    <span class="step-text">另一方点击"加入房间"输入相同房间号</span>
+                </div>
+                <div class="step">
+                    <span class="step-number">3</span>
+                    <span class="step-text">连接成功后即可开始私密聊天</span>
+                </div>
+            </div>
+            <button id="startBtn" class="start-button">开始使用</button>
+        </div>
+        
+        <div class="connection-panel" id="connectionPanel" style="display: none;">
             <div class="connection-status">
                 <div class="status-indicator" id="statusIndicator"></div>
                 <span id="statusText">等待连接...</span>
@@ -22,42 +42,71 @@
             <!-- 详细状态信息 -->
             <div class="status-details" id="statusDetails">
                 <div class="status-item">
-                    <span class="status-label">WebRTC状态:</span>
-                    <span class="status-value" id="webrtcStatus">未初始化</span>
+                    <span class="status-label">连接状态:</span>
+                    <span class="status-value" id="webrtcStatus">未连接</span>
                 </div>
                 <div class="status-item">
-                    <span class="status-label">数据通道:</span>
-                    <span class="status-value" id="dataChannelStatus">未连接</span>
-                </div>
-                <div class="status-item">
-                    <span class="status-label">ICE连接:</span>
-                    <span class="status-value" id="iceStatus">未开始</span>
+                    <span class="status-label">房间号:</span>
+                    <span class="status-value" id="roomCode">-</span>
                 </div>
             </div>
             
             <div class="connection-actions">
-                <button id="createBtn">创建连接</button>
-                <button id="connectBtn">加入连接</button>
-                <button id="disconnectBtn" style="display: none;">断开连接</button>
+                <button id="createBtn" class="action-btn primary">创建房间</button>
+                <button id="connectBtn" class="action-btn secondary">加入房间</button>
+                <button id="disconnectBtn" class="action-btn danger" style="display: none;">断开连接</button>
             </div>
             
-            <div class="connection-code" id="connectionCodeContainer" style="display: none;">
-                <p>您的连接代码：</p>
-                <div class="code-display" id="connectionCode"></div>
-                <button id="copyCodeBtn">复制代码</button>
+            <!-- 房间代码显示 -->
+            <div class="room-code-panel" id="roomCodePanel" style="display: none;">
+                <div class="room-code-header">
+                    <h4>🎯 您的房间号</h4>
+                    <p>请将房间号告诉对方</p>
+                </div>
+                <div class="room-code-display">
+                    <span id="roomCodeDisplay">0000</span>
+                </div>
+                <div class="room-actions">
+                    <button id="copyRoomBtn" class="action-btn secondary">复制房间号</button>
+                    <button id="shareRoomBtn" class="action-btn primary">分享房间号</button>
+                </div>
+            </div>
+            
+            <!-- 加入房间输入 -->
+            <div class="join-room-panel" id="joinRoomPanel" style="display: none;">
+                <div class="join-room-header">
+                    <h4>🔑 输入房间号</h4>
+                    <p>请输入对方提供的4位房间号</p>
+                </div>
+                <div class="room-input-container">
+                    <input type="text" id="roomInput" maxlength="4" placeholder="输入4位数字" pattern="[0-9]*">
+                    <div class="input-hint">请输入4位数字房间号</div>
+                </div>
+                <div class="room-actions">
+                    <button id="confirmJoinBtn" class="action-btn primary">确认加入</button>
+                    <button id="cancelJoinBtn" class="action-btn secondary">取消</button>
+                </div>
             </div>
             
             <!-- 连接日志 -->
             <div class="connection-log" id="connectionLog">
-                <div class="log-header">连接日志</div>
-                <div class="log-content" id="logContent"></div>
+                <div class="log-header">
+                    <span>连接日志</span>
+                    <button id="clearLogBtn" class="clear-log-btn">清空</button>
+                </div>
+                <div class="log-content" id="logContent">
+                    <div class="log-entry">
+                        <span class="log-time">[系统]</span>
+                        <span class="log-info">欢迎使用去中心化聊天</span>
+                    </div>
+                </div>
             </div>
         </div>
         
-        <div class="chat-container">
+        <div class="chat-container" id="chatContainer" style="display: none;">
             <div class="messages" id="messages">
                 <div class="message received">
-                    <div class="message-text">欢迎使用去中心化即时通讯！请先建立连接。</div>
+                    <div class="message-text">连接已建立！现在可以开始私密聊天了。</div>
                     <div class="message-time">系统消息</div>
                 </div>
             </div>
@@ -71,16 +120,6 @@
                     </svg>
                 </button>
             </div>
-        </div>
-        
-        <div class="info-box">
-            <h3>使用说明</h3>
-            <ul>
-                <li>1. 一方点击"创建连接"，生成连接代码</li>
-                <li>2. 另一方点击"加入连接"，输入连接代码</li>
-                <li>3. 连接成功后即可开始聊天</li>
-                <li>4. 所有消息通过点对点连接直接传输</li>
-            </ul>
         </div>
     </div>
 

@@ -2,24 +2,53 @@
 let peerConnection = null;
 let dataChannel = null;
 let isInitiator = false;
+let currentRoomCode = null;
 let connectionStartTime = null;
 
 // DOM元素
+const instructionsPanel = document.getElementById('instructionsPanel');
+const connectionPanel = document.getElementById('connectionPanel');
+const chatContainer = document.getElementById('chatContainer');
 const statusIndicator = document.getElementById('statusIndicator');
 const statusText = document.getElementById('statusText');
 const webrtcStatus = document.getElementById('webrtcStatus');
-const dataChannelStatus = document.getElementById('dataChannelStatus');
-const iceStatus = document.getElementById('iceStatus');
+const roomCodeDisplay = document.getElementById('roomCodeDisplay');
+const roomCode = document.getElementById('roomCode');
 const createBtn = document.getElementById('createBtn');
 const connectBtn = document.getElementById('connectBtn');
 const disconnectBtn = document.getElementById('disconnectBtn');
-const connectionCodeContainer = document.getElementById('connectionCodeContainer');
-const connectionCode = document.getElementById('connectionCode');
-const copyCodeBtn = document.getElementById('copyCodeBtn');
+const roomCodePanel = document.getElementById('roomCodePanel');
+const joinRoomPanel = document.getElementById('joinRoomPanel');
+const roomInput = document.getElementById('roomInput');
+const confirmJoinBtn = document.getElementById('confirmJoinBtn');
+const cancelJoinBtn = document.getElementById('cancelJoinBtn');
+const copyRoomBtn = document.getElementById('copyRoomBtn');
+const shareRoomBtn = document.getElementById('shareRoomBtn');
 const messagesContainer = document.getElementById('messages');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
 const logContent = document.getElementById('logContent');
+const clearLogBtn = document.getElementById('clearLogBtn');
+const startBtn = document.getElementById('startBtn');
+
+// 初始化
+function init() {
+    addLog('应用初始化完成', 'success');
+    updateStatus('等待连接...', 'disconnected');
+    updateDetailedStatus('未连接', '-');
+}
+
+// 开始使用
+function startApp() {
+    instructionsPanel.style.display = 'none';
+    connectionPanel.style.display = 'block';
+    addLog('进入连接界面', 'info');
+}
+
+// 生成4位随机房间号
+function generateRoomCode() {
+    return Math.floor(1000 + Math.random() * 9000).toString();
+}
 
 // 日志系统
 function addLog(message, type = 'info') {
@@ -36,8 +65,12 @@ function addLog(message, type = 'info') {
     
     logContent.appendChild(logEntry);
     logContent.scrollTop = logContent.scrollHeight;
-    
-    console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+// 清空日志
+function clearLog() {
+    logContent.innerHTML = '';
+    addLog('日志已清空', 'info');
 }
 
 // 更新连接状态
@@ -47,7 +80,6 @@ function updateStatus(text, state) {
     // 移除所有状态类
     statusIndicator.className = 'status-indicator';
     
-    // 根据状态添加对应的类
     switch(state) {
         case 'connected':
             statusIndicator.classList.add('connected');
@@ -59,34 +91,30 @@ function updateStatus(text, state) {
             statusIndicator.classList.add('error');
             break;
         default:
-            // 保持默认的红色状态
             break;
     }
     
-    // 启用/禁用输入框和发送按钮
+    // 启用/禁用聊天功能
     const isConnected = state === 'connected';
     messageInput.disabled = !isConnected;
     sendBtn.disabled = !isConnected;
     
     // 显示/隐藏断开连接按钮
     disconnectBtn.style.display = (state === 'connected' || state === 'connecting') ? 'block' : 'none';
+    
+    // 显示/隐藏聊天界面
+    chatContainer.style.display = isConnected ? 'block' : 'none';
 }
 
 // 更新详细状态
-function updateDetailedStatus(webrtcState, dataChannelState, iceState) {
-    if (webrtcState) {
-        webrtcStatus.textContent = webrtcState;
-        webrtcStatus.className = getStatusClass(webrtcState);
+function updateDetailedStatus(connectionState, room) {
+    if (connectionState) {
+        webrtcStatus.textContent = connectionState;
+        webrtcStatus.className = getStatusClass(connectionState);
     }
     
-    if (dataChannelState) {
-        dataChannelStatus.textContent = dataChannelState;
-        dataChannelStatus.className = getStatusClass(dataChannelState);
-    }
-    
-    if (iceState) {
-        iceStatus.textContent = iceState;
-        iceStatus.className = getStatusClass(iceState);
+    if (room) {
+        roomCode.textContent = room;
     }
 }
 
@@ -101,27 +129,26 @@ function getStatusClass(state) {
     return '';
 }
 
-// 重置连接状态
-function resetConnection() {
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-    dataChannel = null;
-    connectionCodeContainer.style.display = 'none';
-    updateStatus('连接已重置', 'disconnected');
-    updateDetailedStatus('未初始化', '未连接', '未开始');
-    addLog('连接已重置', 'info');
-}
-
-// 创建对等连接
-function createConnection() {
+// 创建房间
+function createRoom() {
     connectionStartTime = Date.now();
     isInitiator = true;
     
-    addLog('开始创建连接...', 'info');
-    updateStatus('正在创建连接...', 'connecting');
-    updateDetailedStatus('初始化中...', '准备创建', '等待开始');
+    // 生成房间号
+    currentRoomCode = generateRoomCode();
+    roomCodeDisplay.textContent = currentRoomCode;
+    
+    addLog(`创建房间: ${currentRoomCode}`, 'info');
+    updateStatus('正在创建房间...', 'connecting');
+    updateDetailedStatus('创建中', currentRoomCode);
+    
+    // 显示房间代码面板
+    roomCodePanel.style.display = 'block';
+    joinRoomPanel.style.display = 'none';
+    
+    // 禁用创建/加入按钮
+    createBtn.disabled = true;
+    connectBtn.disabled = true;
     
     try {
         // 配置STUN服务器
@@ -129,97 +156,98 @@ function createConnection() {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' }
-            ],
-            iceCandidatePoolSize: 10
+            ]
         };
         
-        addLog('创建RTCPeerConnection实例', 'info');
+        addLog('初始化WebRTC连接', 'info');
         peerConnection = new RTCPeerConnection(configuration);
         
-        // 设置连接状态监听
+        // 设置连接监听器
         setupConnectionListeners();
         
         addLog('创建数据通道', 'info');
-        dataChannel = peerConnection.createDataChannel('chat', {
-            ordered: true
-        });
+        dataChannel = peerConnection.createDataChannel('chat');
         setupDataChannel();
         
-        addLog('创建Offer...', 'info');
+        addLog('创建连接Offer', 'info');
         return peerConnection.createOffer()
             .then(offer => {
-                addLog('Offer创建成功，设置本地描述', 'success');
+                addLog('设置本地描述', 'info');
                 return peerConnection.setLocalDescription(offer);
             })
             .then(() => {
-                const offer = peerConnection.localDescription;
-                addLog('本地描述设置完成', 'success');
+                addLog('房间创建完成，等待对方加入', 'success');
+                updateStatus('等待对方加入...', 'connecting');
+                updateDetailedStatus('等待连接', currentRoomCode);
                 
-                // 显示连接代码
-                const code = btoa(JSON.stringify(offer));
-                connectionCode.textContent = code;
-                connectionCodeContainer.style.display = 'block';
-                
-                updateStatus('等待对方加入连接...', 'connecting');
-                updateDetailedStatus('等待应答', '等待连接', '收集候选');
-                
-                addLog('连接代码已生成，请分享给对方', 'success');
-                addMessage('已创建连接，请将代码分享给对方', 'received', '系统消息');
-                
-                // 设置超时检查
+                // 设置连接超时
                 setTimeout(() => {
                     if (peerConnection && peerConnection.connectionState !== 'connected') {
-                        addLog('连接超时，请检查网络或重新创建连接', 'warning');
+                        addLog('连接超时，请检查网络或重新创建房间', 'warning');
                         updateStatus('连接超时', 'error');
                     }
-                }, 30000);
+                }, 45000);
             })
             .catch(error => {
-                addLog(`创建连接失败: ${error.message}`, 'error');
-                updateStatus('创建连接失败', 'error');
-                updateDetailedStatus('初始化失败', '创建失败', '错误');
-                throw error;
+                addLog(`创建房间失败: ${error.message}`, 'error');
+                updateStatus('创建失败', 'error');
+                resetConnection();
             });
             
     } catch (error) {
-        addLog(`创建连接时发生错误: ${error.message}`, 'error');
-        updateStatus('创建连接失败', 'error');
-        return Promise.reject(error);
+        addLog(`创建房间时发生错误: ${error.message}`, 'error');
+        updateStatus('创建失败', 'error');
+        resetConnection();
     }
 }
 
-// 加入连接
-function joinConnection() {
-    connectionStartTime = Date.now();
-    isInitiator = false;
+// 加入房间
+function joinRoom() {
+    // 显示加入房间输入面板
+    joinRoomPanel.style.display = 'block';
+    roomCodePanel.style.display = 'none';
+}
+
+// 确认加入房间
+function confirmJoinRoom() {
+    const code = roomInput.value.trim();
     
-    const code = prompt('请输入对方提供的连接代码:');
-    if (!code) {
-        addLog('用户取消输入连接代码', 'warning');
+    if (!code || code.length !== 4 || !/^\d+$/.test(code)) {
+        addLog('请输入有效的4位数字房间号', 'error');
+        alert('请输入有效的4位数字房间号');
         return;
     }
     
-    addLog('开始加入连接...', 'info');
-    updateStatus('正在加入连接...', 'connecting');
-    updateDetailedStatus('初始化中...', '等待通道', '等待开始');
+    currentRoomCode = code;
+    joinRoomPanel.style.display = 'none';
+    createBtn.disabled = true;
+    connectBtn.disabled = true;
+    
+    startJoiningRoom();
+}
+
+// 开始加入房间流程
+function startJoiningRoom() {
+    connectionStartTime = Date.now();
+    isInitiator = false;
+    
+    addLog(`加入房间: ${currentRoomCode}`, 'info');
+    updateStatus('正在加入房间...', 'connecting');
+    updateDetailedStatus('连接中', currentRoomCode);
     
     try {
-        const offer = JSON.parse(atob(code));
-        addLog('连接代码解析成功', 'success');
-        
         // 配置STUN服务器
         const configuration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' }
-            ],
-            iceCandidatePoolSize: 10
+            ]
         };
         
-        addLog('创建RTCPeerConnection实例', 'info');
+        addLog('初始化WebRTC连接', 'info');
         peerConnection = new RTCPeerConnection(configuration);
         
-        // 设置连接状态监听
+        // 设置连接监听器
         setupConnectionListeners();
         
         // 设置数据通道回调
@@ -229,46 +257,21 @@ function joinConnection() {
             setupDataChannel();
         };
         
-        addLog('设置远程描述...', 'info');
-        return peerConnection.setRemoteDescription(offer)
-            .then(() => {
-                addLog('远程描述设置成功', 'success');
-                updateDetailedStatus('创建应答中...', '等待通道', '收集候选');
-                return peerConnection.createAnswer();
-            })
-            .then(answer => {
-                addLog('Answer创建成功', 'success');
-                return peerConnection.setLocalDescription(answer);
-            })
-            .then(() => {
-                addLog('本地描述设置完成', 'success');
-                updateStatus('连接建立中...', 'connecting');
-                updateDetailedStatus('等待连接', '等待打开', '建立连接');
-                addMessage('正在建立连接...', 'received', '系统消息');
-                
-                // 设置超时检查
-                setTimeout(() => {
-                    if (peerConnection && peerConnection.connectionState !== 'connected') {
-                        addLog('连接超时，请检查网络或重新尝试', 'warning');
-                        updateStatus('连接超时', 'error');
-                    }
-                }, 30000);
-            })
-            .catch(error => {
-                addLog(`加入连接失败: ${error.message}`, 'error');
-                updateStatus('加入连接失败', 'error');
-                updateDetailedStatus('连接失败', '连接失败', '错误');
-                throw error;
-            });
-            
+        addLog('等待连接建立...', 'info');
+        updateDetailedStatus('等待连接', currentRoomCode);
+        
+        // 设置连接超时
+        setTimeout(() => {
+            if (peerConnection && peerConnection.connectionState !== 'connected') {
+                addLog('连接超时，请检查房间号或网络', 'warning');
+                updateStatus('连接超时', 'error');
+            }
+        }, 45000);
+        
     } catch (error) {
-        addLog(`加入连接时发生错误: ${error.message}`, 'error');
-        if (error instanceof SyntaxError) {
-            addLog('连接代码格式错误，请检查代码是否正确', 'error');
-            alert('无效的连接代码！请检查代码是否正确。');
-        }
-        updateStatus('加入连接失败', 'error');
-        return Promise.reject(error);
+        addLog(`加入房间时发生错误: ${error.message}`, 'error');
+        updateStatus('加入失败', 'error');
+        resetConnection();
     }
 }
 
@@ -277,36 +280,32 @@ function setupConnectionListeners() {
     // 处理ICE候选
     peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
-            addLog(`ICE候选收集: ${event.candidate.type}`, 'info');
-            updateDetailedStatus(null, null, '收集候选中');
-        } else {
-            addLog('ICE候选收集完成', 'success');
-            updateDetailedStatus(null, null, '候选收集完成');
+            addLog('收集网络连接信息...', 'info');
         }
     };
     
     // ICE连接状态
     peerConnection.oniceconnectionstatechange = () => {
         const state = peerConnection.iceConnectionState;
-        addLog(`ICE连接状态: ${state}`, 'info');
+        addLog(`网络状态: ${state}`, 'info');
         
         switch(state) {
             case 'checking':
-                updateDetailedStatus(null, null, '检查连接中');
+                updateDetailedStatus('建立连接中', currentRoomCode);
                 break;
             case 'connected':
             case 'completed':
-                updateDetailedStatus(null, null, '连接成功');
+                updateDetailedStatus('连接成功', currentRoomCode);
                 const connectionTime = Date.now() - connectionStartTime;
-                addLog(`ICE连接建立成功，耗时: ${connectionTime}ms`, 'success');
+                addLog(`连接建立成功! 耗时: ${connectionTime}ms`, 'success');
                 break;
             case 'disconnected':
-                updateDetailedStatus(null, null, '连接断开');
-                addLog('ICE连接断开', 'warning');
+                updateDetailedStatus('连接断开', currentRoomCode);
+                addLog('网络连接断开', 'warning');
                 break;
             case 'failed':
-                updateDetailedStatus(null, null, '连接失败');
-                addLog('ICE连接失败', 'error');
+                updateDetailedStatus('连接失败', currentRoomCode);
+                addLog('网络连接失败', 'error');
                 break;
         }
     };
@@ -314,79 +313,58 @@ function setupConnectionListeners() {
     // 连接状态
     peerConnection.onconnectionstatechange = () => {
         const state = peerConnection.connectionState;
-        addLog(`WebRTC连接状态: ${state}`, 'info');
+        addLog(`连接状态: ${state}`, 'info');
         
         switch(state) {
             case 'connecting':
                 updateStatus('连接建立中...', 'connecting');
-                updateDetailedStatus('连接中', null, null);
+                updateDetailedStatus('连接中', currentRoomCode);
                 break;
             case 'connected':
                 updateStatus('连接成功！', 'connected');
-                updateDetailedStatus('已连接', null, null);
+                updateDetailedStatus('已连接', currentRoomCode);
                 const totalTime = Date.now() - connectionStartTime;
-                addLog(`连接建立完成！总耗时: ${totalTime}ms`, 'success');
-                addMessage('连接已建立，可以开始聊天了', 'received', '系统消息');
+                addLog(`连接完成! 总耗时: ${totalTime}ms`, 'success');
+                addMessage('连接已建立，可以开始私密聊天了！', 'received', '系统消息');
                 break;
             case 'disconnected':
                 updateStatus('连接断开', 'error');
-                updateDetailedStatus('已断开', '已关闭', '已断开');
+                updateDetailedStatus('已断开', currentRoomCode);
                 addLog('连接已断开', 'warning');
                 addMessage('连接已断开', 'received', '系统消息');
                 break;
             case 'failed':
                 updateStatus('连接失败', 'error');
-                updateDetailedStatus('连接失败', '连接失败', '连接失败');
+                updateDetailedStatus('连接失败', currentRoomCode);
                 addLog('连接失败', 'error');
                 addMessage('连接失败，请重试', 'received', '系统消息');
                 break;
         }
-    };
-    
-    // ICE收集状态
-    peerConnection.onicegatheringstatechange = () => {
-        const state = peerConnection.iceGatheringState;
-        addLog(`ICE收集状态: ${state}`, 'info');
     };
 }
 
 // 设置数据通道
 function setupDataChannel() {
     dataChannel.onopen = () => {
-        addLog('数据通道已打开', 'success');
-        updateDetailedStatus(null, '已连接', null);
+        addLog('数据通道已打开，可以开始聊天', 'success');
+        updateDetailedStatus('已连接', currentRoomCode);
         updateStatus('连接成功！', 'connected');
     };
     
     dataChannel.onclose = () => {
         addLog('数据通道已关闭', 'warning');
-        updateDetailedStatus(null, '已关闭', null);
+        updateDetailedStatus('已断开', currentRoomCode);
     };
     
     dataChannel.onmessage = (event) => {
-        addLog(`收到消息: ${event.data}`, 'info');
+        addLog(`收到消息`, 'info');
         addMessage(event.data, 'received');
     };
     
     dataChannel.onerror = (error) => {
         addLog(`数据通道错误: ${error.message}`, 'error');
-        updateDetailedStatus(null, '错误', null);
+        updateDetailedStatus('连接错误', currentRoomCode);
     };
-    
-    // 监听数据通道状态
-    const checkDataChannelState = () => {
-        if (dataChannel) {
-            const state = dataChannel.readyState;
-            if (state === 'connecting') {
-                updateDetailedStatus(null, '连接中', null);
-            } else if (state === 'open') {
-                updateDetailedStatus(null, '已连接', null);
-            }
-        }
-    };
-    
-    // 初始检查
-    checkDataChannelState();
 }
 
 // 发送消息
@@ -399,7 +377,7 @@ function sendMessage() {
     
     try {
         dataChannel.send(message);
-        addLog(`发送消息: ${message}`, 'info');
+        addLog(`发送消息`, 'info');
         addMessage(message, 'sent');
         messageInput.value = '';
     } catch (error) {
@@ -413,6 +391,63 @@ function disconnect() {
     addLog('用户主动断开连接', 'info');
     resetConnection();
     addMessage('连接已断开', 'received', '系统消息');
+}
+
+// 重置连接
+function resetConnection() {
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    dataChannel = null;
+    currentRoomCode = null;
+    
+    roomCodePanel.style.display = 'none';
+    joinRoomPanel.style.display = 'none';
+    roomInput.value = '';
+    
+    createBtn.disabled = false;
+    connectBtn.disabled = false;
+    
+    updateStatus('连接已断开', 'disconnected');
+    updateDetailedStatus('未连接', '-');
+    addLog('连接已重置', 'info');
+}
+
+// 复制房间号
+function copyRoomCode() {
+    navigator.clipboard.writeText(currentRoomCode).then(() => {
+        addLog('房间号已复制到剪贴板', 'success');
+        alert('房间号已复制到剪贴板！');
+    }).catch(err => {
+        addLog(`复制失败: ${err.message}`, 'error');
+        // 备用方案
+        const textArea = document.createElement('textarea');
+        textArea.value = currentRoomCode;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        addLog('房间号已复制到剪贴板(备用方案)', 'success');
+        alert('房间号已复制到剪贴板！');
+    });
+}
+
+// 分享房间号
+function shareRoomCode() {
+    if (navigator.share) {
+        navigator.share({
+            title: '加入我的聊天房间',
+            text: `使用房间号 ${currentRoomCode} 加入我的私密聊天`,
+        }).then(() => {
+            addLog('房间号分享成功', 'success');
+        }).catch(error => {
+            addLog(`分享失败: ${error.message}`, 'error');
+            copyRoomCode(); // 分享失败时 fallback 到复制
+        });
+    } else {
+        copyRoomCode(); // 不支持分享时 fallback 到复制
+    }
 }
 
 // 添加消息到聊天界面
@@ -441,37 +476,30 @@ function addMessage(text, type, sender = '') {
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// 复制连接代码
-function copyConnectionCode() {
-    const code = connectionCode.textContent;
-    navigator.clipboard.writeText(code).then(() => {
-        addLog('连接代码已复制到剪贴板', 'success');
-        alert('连接代码已复制到剪贴板！');
-    }).catch(err => {
-        addLog(`复制失败: ${err.message}`, 'error');
-        // 备用方案
-        const textArea = document.createElement('textarea');
-        textArea.value = code;
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-        addLog('连接代码已复制到剪贴板(备用方案)', 'success');
-        alert('连接代码已复制到剪贴板！');
-    });
-}
-
 // 事件监听
-createBtn.addEventListener('click', createConnection);
-connectBtn.addEventListener('click', joinConnection);
+startBtn.addEventListener('click', startApp);
+createBtn.addEventListener('click', createRoom);
+connectBtn.addEventListener('click', joinRoom);
 disconnectBtn.addEventListener('click', disconnect);
+confirmJoinBtn.addEventListener('click', confirmJoinRoom);
+cancelJoinBtn.addEventListener('click', () => {
+    joinRoomPanel.style.display = 'none';
+    addLog('取消加入房间', 'info');
+});
+copyRoomBtn.addEventListener('click', copyRoomCode);
+shareRoomBtn.addEventListener('click', shareRoomCode);
 sendBtn.addEventListener('click', sendMessage);
-copyCodeBtn.addEventListener('click', copyConnectionCode);
+clearLogBtn.addEventListener('click', clearLog);
 
 messageInput.addEventListener('keypress', (event) => {
     if (event.key === 'Enter') {
         sendMessage();
     }
+});
+
+// 房间号输入限制
+roomInput.addEventListener('input', (e) => {
+    e.target.value = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
 });
 
 // 页面卸载时清理
@@ -481,7 +509,5 @@ window.addEventListener('beforeunload', () => {
     }
 });
 
-// 初始状态
-addLog('应用初始化完成', 'success');
-updateStatus('等待连接...', 'disconnected');
-updateDetailedStatus('未初始化', '未连接', '未开始');
+// 初始化应用
+init();
