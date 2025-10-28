@@ -21,66 +21,19 @@ body {
 
 .container {
     width: 100%;
-    height: 100vh;
+    height: calc(100vh - 80px);
     position: relative;
     background: #ffffff;
     overflow: hidden;
 }
 
-/* 顶部操作栏 */
-.top-actions {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    display: flex;
-    justify-content: space-between;
-    padding: 15px 20px;
-    z-index: 1000;
-    background: #ffffff;
-    border-bottom: 1px solid #f0f0f0;
-    height: 70px;
-}
-
-.action-btn {
-    background: #007bff;
-    color: white;
-    border: none;
-    border-radius: 25px;
-    padding: 12px 25px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
-    transition: all 0.3s ease;
-    min-width: 80px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.action-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
-}
-
-.action-btn.history {
-    background: #6c757d;
-    box-shadow: 0 2px 8px rgba(108, 117, 125, 0.3);
-}
-
-.action-btn.history:hover {
-    box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
-}
-
 /* 输入框页面 */
 .editor-page {
     position: absolute;
-    top: 70px; /* 为顶部按钮留出空间 */
+    top: 0;
     left: 0;
     width: 100%;
-    height: calc(100% - 70px); /* 减去顶部按钮高度 */
+    height: 100%;
     background: #ffffff;
     z-index: 10;
     transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -95,7 +48,7 @@ body {
 .note-area {
     flex: 1;
     width: 100%;
-    padding: 20px;
+    padding: 25px;
     font-size: 22px;
     line-height: 1.7;
     border: none;
@@ -116,10 +69,10 @@ body {
 /* 灵感页面 */
 .history-page {
     position: absolute;
-    top: 70px; /* 为顶部按钮留出空间 */
+    top: 0;
     left: 0;
     width: 100%;
-    height: calc(100% - 70px); /* 减去顶部按钮高度 */
+    height: 100%;
     background: #ffffff;
     z-index: 5;
     display: flex;
@@ -127,7 +80,7 @@ body {
 }
 
 .history-header {
-    padding: 15px 20px 10px 20px;
+    padding: 20px 25px 15px 25px;
     border-bottom: 1px solid #f0f0f0;
     flex-shrink: 0;
 }
@@ -231,7 +184,7 @@ body {
 
 /* 空状态 */
 .empty-state {
-    padding: 40px 25px;
+    padding: 60px 25px;
     text-align: center;
     color: #6c757d;
     font-size: 15px;
@@ -246,27 +199,61 @@ body {
     opacity: 0.5;
 }
 
+/* 底部操作栏 */
+.bottom-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 15px 25px;
+    z-index: 1000;
+    background: #ffffff;
+    border-top: 1px solid #f0f0f0;
+    height: 80px;
+}
+
+.action-btn {
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 14px 30px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 12px rgba(0, 123, 255, 0.3);
+    transition: all 0.3s ease;
+    min-width: 100px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 123, 255, 0.4);
+}
+
+.action-btn.history {
+    background: #6c757d;
+    box-shadow: 0 2px 12px rgba(108, 117, 125, 0.3);
+}
+
+.action-btn.history:hover {
+    box-shadow: 0 4px 16px rgba(108, 117, 125, 0.4);
+}
+
 /* 响应式设计 */
 @media (max-width: 768px) {
-    .top-actions {
-        padding: 12px 15px;
-        height: 60px;
-    }
-    
-    .action-btn {
-        padding: 10px 20px;
-        font-size: 15px;
-        min-width: 70px;
-        height: 36px;
-    }
-    
-    .editor-page {
-        top: 60px;
-        height: calc(100% - 60px);
+    .container {
+        height: calc(100vh - 70px);
     }
     
     .note-area {
-        padding: 15px;
+        padding: 20px;
         font-size: 20px;
     }
     
@@ -274,13 +261,8 @@ body {
         font-size: 20px;
     }
     
-    .history-page {
-        top: 60px;
-        height: calc(100% - 60px);
-    }
-    
     .history-header {
-        padding: 12px 15px 8px 15px;
+        padding: 15px 20px 10px 20px;
     }
     
     .history-header h1 {
@@ -302,6 +284,18 @@ body {
     
     .history-time {
         font-size: 13px;
+    }
+    
+    .bottom-actions {
+        padding: 12px 20px;
+        height: 70px;
+    }
+    
+    .action-btn {
+        padding: 12px 25px;
+        font-size: 15px;
+        min-width: 90px;
+        height: 46px;
     }
 }
 

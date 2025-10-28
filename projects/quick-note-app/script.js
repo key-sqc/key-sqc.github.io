@@ -6,6 +6,8 @@ class QuickNoteApp {
         this.historyList = document.getElementById('historyList');
         this.togglePageBtn = document.getElementById('togglePageBtn');
         this.saveBtn = document.getElementById('saveBtn');
+        this.loadingElement = document.getElementById('loading');
+        this.appContent = document.querySelector('.app-content');
         
         this.CURRENT_NOTE_KEY = 'currentNote';
         this.HISTORY_KEY = 'noteHistory';
@@ -16,25 +18,76 @@ class QuickNoteApp {
         this.isSwiping = false;
         this.swipeThreshold = 60;
         
-        this.init();
+        // 预加载数据
+        this.preloadData().then(() => {
+            this.init();
+        });
+    }
+    
+    // 预加载数据
+    async preloadData() {
+        try {
+            // 并行加载所有数据
+            await Promise.all([
+                this.loadCurrentNote(),
+                this.loadHistory()
+            ]);
+        } catch (error) {
+            console.error('预加载数据失败:', error);
+        }
+    }
+    
+    async loadCurrentNote() {
+        return new Promise((resolve) => {
+            try {
+                const current = localStorage.getItem(this.CURRENT_NOTE_KEY);
+                if (current) {
+                    this.noteArea.value = current;
+                }
+                resolve();
+            } catch (error) {
+                console.error('加载当前内容失败:', error);
+                resolve();
+            }
+        });
+    }
+    
+    async loadHistory() {
+        return new Promise((resolve) => {
+            try {
+                const history = localStorage.getItem(this.HISTORY_KEY);
+                const historyArray = history ? JSON.parse(history) : [];
+                this.renderHistory(historyArray);
+                resolve();
+            } catch (error) {
+                console.error('加载历史记录失败:', error);
+                resolve();
+            }
+        });
     }
     
     init() {
-        // 加载当前编辑内容和历史记录
-        this.loadCurrentNote();
-        this.loadHistory();
+        // 隐藏加载动画，显示内容
+        this.hideLoading();
         
         // 绑定事件
         this.togglePageBtn.addEventListener('click', () => this.togglePage());
         this.saveBtn.addEventListener('click', () => this.saveNow());
         
-        // 自动聚焦
-        this.autoFocus();
+        // 首次进入时强制弹出键盘
+        this.forceShowKeyboard();
         
         // 页面事件监听
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) {
                 this.saveOnLeave();
+            } else {
+                // 当页面重新可见时，重新聚焦
+                setTimeout(() => {
+                    if (!this.isHistoryVisible) {
+                        this.noteArea.focus();
+                    }
+                }, 100);
             }
         });
         
@@ -43,12 +96,78 @@ class QuickNoteApp {
         console.log('便签应用已初始化');
     }
     
-    autoFocus() {
+    hideLoading() {
+        if (this.loadingElement && this.appContent) {
+            setTimeout(() => {
+                this.loadingElement.style.opacity = '0';
+                this.appContent.classList.add('loaded');
+                
+                setTimeout(() => {
+                    this.loadingElement.style.display = 'none';
+                    // 加载完成后确保键盘弹出
+                    if (!this.isHistoryVisible) {
+                        this.forceShowKeyboard();
+                    }
+                }, 300);
+            }, 500);
+        }
+    }
+    
+    // 强制显示键盘的方法
+    forceShowKeyboard() {
+        if (this.isHistoryVisible) return;
+        
+        console.log('强制显示键盘');
+        
+        // 方法1: 直接聚焦并触发点击
+        this.noteArea.focus();
+        
+        // 方法2: 设置光标位置
+        const length = this.noteArea.value.length;
+        this.noteArea.setSelectionRange(length, length);
+        
+        // 方法3: 触发虚拟键盘（如果支持）
+        this.triggerKeyboard();
+        
+        // 方法4: 延迟再次尝试（应对某些浏览器的限制）
         setTimeout(() => {
             this.noteArea.focus();
-            const length = this.noteArea.value.length;
-            this.noteArea.setSelectionRange(length, length);
-        }, 400);
+            this.noteArea.click();
+        }, 800);
+    }
+    
+    // 触发键盘显示
+    triggerKeyboard() {
+        // 尝试使用虚拟键盘 API
+        if ('virtualKeyboard' in navigator) {
+            try {
+                navigator.virtualKeyboard.show();
+                console.log('使用虚拟键盘 API');
+            } catch (e) {
+                console.log('虚拟键盘 API 不可用');
+            }
+        }
+        
+        // 尝试通过创建临时输入框来触发键盘
+        this.createTempInput();
+    }
+    
+    // 创建临时输入框来触发键盘
+    createTempInput() {
+        const tempInput = document.createElement('input');
+        tempInput.style.position = 'absolute';
+        tempInput.style.top = '-100px';
+        tempInput.style.left = '0';
+        tempInput.style.height = '0';
+        tempInput.style.opacity = '0';
+        document.body.appendChild(tempInput);
+        
+        tempInput.focus();
+        
+        setTimeout(() => {
+            this.noteArea.focus();
+            document.body.removeChild(tempInput);
+        }, 100);
     }
     
     togglePage() {
@@ -67,7 +186,8 @@ class QuickNoteApp {
         
         setTimeout(() => {
             this.editorPage.classList.remove('sliding-down');
-            this.noteArea.focus();
+            // 返回编辑页面时强制弹出键盘
+            this.forceShowKeyboard();
         }, 400);
     }
     
@@ -99,27 +219,6 @@ class QuickNoteApp {
             this.saveBtn.textContent = originalText;
             this.saveBtn.style.background = '#007bff';
         }, 1500);
-    }
-    
-    loadCurrentNote() {
-        try {
-            const current = localStorage.getItem(this.CURRENT_NOTE_KEY);
-            if (current) {
-                this.noteArea.value = current;
-            }
-        } catch (error) {
-            console.error('加载当前内容失败:', error);
-        }
-    }
-    
-    loadHistory() {
-        try {
-            const history = localStorage.getItem(this.HISTORY_KEY);
-            const historyArray = history ? JSON.parse(history) : [];
-            this.renderHistory(historyArray);
-        } catch (error) {
-            console.error('加载历史记录失败:', error);
-        }
     }
     
     renderHistory(historyArray) {
@@ -336,7 +435,12 @@ class QuickNoteApp {
 // 全局实例
 let app;
 
-// 初始化应用
-document.addEventListener('DOMContentLoaded', () => {
+// 使用最快的初始化方式
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        app = new QuickNoteApp();
+    });
+} else {
+    // DOM 已经就绪，立即初始化
     app = new QuickNoteApp();
-});
+}
