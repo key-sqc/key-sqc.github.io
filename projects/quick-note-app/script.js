@@ -192,6 +192,9 @@ class QuickNoteApp {
     }
     
     showHistoryPage() {
+        // 切换到灵感页面时，先保存当前内容
+        this.saveCurrentContent();
+        
         this.editorPage.classList.add('sliding-up');
         this.togglePageBtn.textContent = '返回';
         this.isHistoryVisible = true;
@@ -202,10 +205,60 @@ class QuickNoteApp {
         }, 400);
     }
     
+    // 保存当前编辑内容到历史记录
+    saveCurrentContent() {
+        const content = this.noteArea.value.trim();
+        if (!content) return;
+        
+        try {
+            // 获取现有历史记录
+            const history = localStorage.getItem(this.HISTORY_KEY);
+            const historyArray = history ? JSON.parse(history) : [];
+            
+            if (this.editingIndex !== null) {
+                // 更新现有记录
+                historyArray[this.editingIndex] = {
+                    content: content,
+                    timestamp: Date.now()
+                };
+                console.log('已更新记录');
+            } else {
+                // 创建新记录
+                const newRecord = {
+                    content: content,
+                    timestamp: Date.now()
+                };
+                
+                // 添加到历史记录开头
+                historyArray.unshift(newRecord);
+                
+                // 限制历史记录数量（最多50条）
+                if (historyArray.length > 50) {
+                    historyArray.splice(50);
+                }
+                console.log('已创建新记录');
+            }
+            
+            // 保存历史记录
+            localStorage.setItem(this.HISTORY_KEY, JSON.stringify(historyArray));
+            
+            // 清空当前编辑状态
+            this.noteArea.value = '';
+            this.editingIndex = null;
+            this.saveCurrentNote();
+            
+            // 更新历史记录显示
+            this.renderHistory(historyArray);
+            
+        } catch (error) {
+            console.error('保存内容失败:', error);
+        }
+    }
+    
     saveNow() {
         const content = this.noteArea.value.trim();
         if (content) {
-            this.saveOnLeave();
+            this.saveCurrentContent();
             this.showSaveFeedback();
         }
     }
