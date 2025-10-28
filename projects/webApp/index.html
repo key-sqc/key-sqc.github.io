@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>去中心化即时通讯</title>
     <link rel="stylesheet" href="style.css">
+    <!-- 添加 jsQR 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 </head>
 <body>
     <div class="container">
@@ -129,6 +131,9 @@
                     <canvas id="scannerCanvas" style="display: none;"></canvas>
                     <div class="scan-frame">
                         <div class="scan-line"></div>
+                    </div>
+                    <div class="scan-result" id="scanResult" style="display: none;">
+                        <div class="result-success">✅ 二维码识别成功！</div>
                     </div>
                 </div>
                 <div class="scan-actions">

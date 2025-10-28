@@ -8,6 +8,8 @@ let currentOffer = null;
 let qrStream = null;
 let currentFacingMode = 'environment';
 let collectedIceCandidates = [];
+let scanInterval = null;
+let isScanning = false;
 
 // DOM元素
 const instructionsPanel = document.getElementById('instructionsPanel');
@@ -29,6 +31,7 @@ const manualCodeDisplay = document.getElementById('manualCodeDisplay');
 const connectionInput = document.getElementById('connectionInput');
 const scannerVideo = document.getElementById('scannerVideo');
 const scannerCanvas = document.getElementById('scannerCanvas');
+const scanResult = document.getElementById('scanResult');
 const messagesContainer = document.getElementById('messages');
 const messageInput = document.getElementById('messageInput');
 const sendBtn = document.getElementById('sendBtn');
@@ -183,7 +186,7 @@ function getStatusClass(state) {
     return '';
 }
 
-// 创建房间 - 修复版本
+// 创建房间
 function createRoom() {
     connectionStartTime = Date.now();
     isInitiator = true;
@@ -223,26 +226,6 @@ function createRoom() {
         peerConnection.oniceconnectionstatechange = () => {
             const state = peerConnection.iceConnectionState;
             addLog(`网络状态: ${state}`, 'info');
-            
-            switch(state) {
-                case 'checking':
-                    updateDetailedStatus('建立连接中', currentRoomCode);
-                    break;
-                case 'connected':
-                case 'completed':
-                    updateDetailedStatus('连接成功', currentRoomCode);
-                    const connectionTime = Date.now() - connectionStartTime;
-                    addLog(`连接建立成功! 耗时: ${connectionTime}ms`, 'success');
-                    break;
-                case 'disconnected':
-                    updateDetailedStatus('连接断开', currentRoomCode);
-                    addLog('网络连接断开', 'warning');
-                    break;
-                case 'failed':
-                    updateDetailedStatus('连接失败', currentRoomCode);
-                    addLog('网络连接失败', 'error');
-                    break;
-            }
         };
         
         peerConnection.onconnectionstatechange = () => {
@@ -311,7 +294,7 @@ function createRoom() {
     }
 }
 
-// 生成最终的二维码 - 修复版本
+// 生成最终的二维码
 function generateFinalQRCode() {
     if (!currentOffer) {
         addLog('等待Offer准备完成...', 'info');
@@ -340,7 +323,6 @@ function generateFinalQRCode() {
         addLog('二维码生成成功', 'success');
     } catch (error) {
         addLog(`二维码生成失败: ${error.message}`, 'error');
-        // 即使二维码生成失败，也要显示手动输入代码
     }
     
     // 显示二维码面板
@@ -361,7 +343,7 @@ function showQRCodePanel() {
 // 刷新二维码
 function refreshQRCode() {
     addLog('刷新二维码', 'info');
-    createRoom(); // 重新创建房间和二维码
+    createRoom();
 }
 
 // 关闭二维码面板
@@ -390,6 +372,8 @@ async function startQRScan() {
     addLog('启动二维码扫描', 'info');
     scanPanel.style.display = 'block';
     joinPanel.style.display = 'none';
+    scanResult.style.display = 'none';
+    isScanning = true;
     
     try {
         qrStream = await navigator.mediaDevices.getUserMedia({
@@ -404,7 +388,7 @@ async function startQRScan() {
         await scannerVideo.play();
         
         // 开始扫描循环
-        startScanLoop();
+        startQRScanLoop();
         
     } catch (error) {
         addLog(`摄像头访问失败: ${error.message}`, 'error');
@@ -413,37 +397,47 @@ async function startQRScan() {
     }
 }
 
-// 扫描循环
-function startScanLoop() {
+// 使用jsQR进行二维码扫描
+function startQRScanLoop() {
     const canvas = scannerCanvas;
     const ctx = canvas.getContext('2d');
-    let scanCount = 0;
     
     function scan() {
+        if (!isScanning) return;
+        
         if (scannerVideo.videoWidth > 0 && scannerVideo.videoHeight > 0) {
             canvas.width = scannerVideo.videoWidth;
             canvas.height = scannerVideo.videoHeight;
             
             ctx.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height);
             
-            // 简化的二维码识别（在实际应用中应该使用专业的QR码识别库）
-            scanCount++;
-            if (scanCount % 10 === 0) { // 每10帧尝试识别一次
-                try {
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                    // 这里可以集成专业的QR码识别库
-                    // 暂时使用模拟识别
-                    if (Math.random() < 0.01) { // 1%的几率"识别"到二维码
-                        simulateQRDetection();
-                        return;
-                    }
-                } catch (error) {
-                    // 忽略识别错误
+            try {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
+                
+                if (code) {
+                    // 找到二维码！
+                    addLog('二维码识别成功！', 'success');
+                    scanResult.style.display = 'block';
+                    
+                    // 绘制二维码定位框
+                    drawQRCodeLocation(ctx, code.location);
+                    
+                    // 处理扫描到的数据
+                    setTimeout(() => {
+                        handleScannedQRCode(code.data);
+                    }, 1000);
+                    
+                    return; // 停止扫描
                 }
+            } catch (error) {
+                // 忽略识别错误，继续扫描
             }
         }
         
-        if (scanPanel.style.display !== 'none') {
+        if (isScanning) {
             requestAnimationFrame(scan);
         }
     }
@@ -451,13 +445,34 @@ function startScanLoop() {
     scan();
 }
 
-// 模拟二维码识别（用于演示）
-function simulateQRDetection() {
-    addLog('请使用真实QR码识别库替换此功能', 'warning');
-    // 在实际应用中，这里应该使用如jsQR等专业库
+// 绘制二维码定位框
+function drawQRCodeLocation(ctx, location) {
+    ctx.strokeStyle = '#2ed573';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(location.topLeftCorner.x, location.topLeftCorner.y);
+    ctx.lineTo(location.topRightCorner.x, location.topRightCorner.y);
+    ctx.lineTo(location.bottomRightCorner.x, location.bottomRightCorner.y);
+    ctx.lineTo(location.bottomLeftCorner.x, location.bottomLeftCorner.y);
+    ctx.closePath();
+    ctx.stroke();
 }
 
-// 处理文件选择
+// 处理扫描到的二维码
+function handleScannedQRCode(qrData) {
+    try {
+        const connectionData = JSON.parse(qrData);
+        addLog('二维码数据解析成功', 'success');
+        processConnectionData(connectionData);
+    } catch (error) {
+        addLog('二维码数据解析失败: ' + error.message, 'error');
+        alert('无效的二维码，请扫描有效的连接二维码');
+        // 重新开始扫描
+        scanResult.style.display = 'none';
+    }
+}
+
+// 处理文件选择 - 使用jsQR解析图片
 function handleFileSelect(event) {
     const file = event.target.files[0];
     if (!file) return;
@@ -473,10 +488,29 @@ function handleFileSelect(event) {
     reader.onload = function(e) {
         const img = new Image();
         img.onload = function() {
-            // 在实际应用中，这里应该使用专业的QR码识别库
-            // 暂时显示提示信息
-            addLog('图片加载成功，请使用专业QR码识别库解析', 'info');
-            alert('图库扫描功能需要集成专业QR码识别库（如jsQR）。当前为演示版本。');
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            try {
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                    inversionAttempts: "dontInvert",
+                });
+                
+                if (code) {
+                    addLog('图片中的二维码识别成功！', 'success');
+                    handleScannedQRCode(code.data);
+                } else {
+                    addLog('未在图片中识别到二维码', 'error');
+                    alert('未在图片中识别到有效的二维码');
+                }
+            } catch (error) {
+                addLog('图片解析失败: ' + error.message, 'error');
+                alert('图片解析失败，请选择清晰的二维码图片');
+            }
         };
         img.onerror = function() {
             addLog('图片加载失败', 'error');
@@ -494,12 +528,14 @@ function handleFileSelect(event) {
 
 // 取消扫描
 function cancelQRScan() {
+    isScanning = false;
     if (qrStream) {
         qrStream.getTracks().forEach(track => track.stop());
         qrStream = null;
     }
     scannerVideo.srcObject = null;
     scanPanel.style.display = 'none';
+    scanResult.style.display = 'none';
     addLog('取消二维码扫描', 'info');
 }
 
@@ -538,7 +574,7 @@ function processConnectionData(connectionData) {
     }
 }
 
-// 加入房间 - 修复版本
+// 加入房间
 function joinRoom(connectionData) {
     connectionStartTime = Date.now();
     isInitiator = false;
@@ -729,6 +765,7 @@ function resetConnection() {
     currentRoomCode = null;
     currentOffer = null;
     collectedIceCandidates = [];
+    isScanning = false;
     
     // 关闭所有面板
     qrPanel.style.display = 'none';
@@ -814,6 +851,7 @@ function cleanup() {
     if (qrStream) {
         qrStream.getTracks().forEach(track => track.stop());
     }
+    isScanning = false;
 }
 
 // 初始化应用
