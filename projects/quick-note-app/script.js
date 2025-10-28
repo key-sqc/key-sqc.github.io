@@ -1,5 +1,6 @@
 /**
- * 精致便签应用 - 修复滑动问题和性能优化版本
+ * 精致便签应用 - 简化滑动交互版本
+ * 只通过颜色变化提示操作，不移动列表项
  */
 class ElegantNoteApp {
     constructor() {
@@ -55,7 +56,7 @@ class ElegantNoteApp {
         this.HISTORY_KEY = 'noteHistory';
         this.editingIndex = null;
         this.isHistoryVisible = false;
-        this.swipeThreshold = 60;
+        this.swipeThreshold = 60; // 降低阈值，更容易触发
         
         // 设置初始页面状态
         this.elements.editorPage.classList.add('active');
@@ -113,7 +114,7 @@ class ElegantNoteApp {
             if (document.hidden) this.saveOnLeave();
         });
         
-        // 触摸事件委托 - 支持左右滑动
+        // 触摸事件委托 - 简化滑动交互
         historyList.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: true });
         historyList.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
         historyList.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: true });
@@ -153,7 +154,7 @@ class ElegantNoteApp {
         };
     }
     
-    // 触摸事件处理 - 修复滑动逻辑
+    // 触摸事件处理 - 简化滑动逻辑，只改变颜色
     handleTouchStart(e) {
         const item = e.target.closest('.history-item');
         if (!item) return;
@@ -174,7 +175,6 @@ class ElegantNoteApp {
         
         // 重置状态
         item.classList.remove('swiping-left', 'swiping-right');
-        item.style.transform = '';
         item.style.transition = 'none';
     }
     
@@ -204,27 +204,17 @@ class ElegantNoteApp {
         }
         
         if (this.currentSwipeItem.isSwiping) {
-            // 根据方向设置不同的最大滑动距离
-            const maxSwipeDistance = 80;
-            let translateX = 0;
-            
+            // 只改变颜色，不移动位置
             if (this.currentSwipeItem.direction === 'left') {
-                // 左滑删除 - 向左移动
-                translateX = Math.max(diffX, -maxSwipeDistance);
-                element.style.transform = `translate3d(${translateX}px, 0, 0)`;
+                // 左滑删除 - 红色背景
                 element.classList.add('swiping-left');
                 element.classList.remove('swiping-right');
                 
             } else if (this.currentSwipeItem.direction === 'right') {
-                // 右滑置顶 - 向右移动
-                translateX = Math.min(diffX, maxSwipeDistance);
-                element.style.transform = `translate3d(${translateX}px, 0, 0)`;
+                // 右滑置顶 - 黄色背景
                 element.classList.add('swiping-right');
                 element.classList.remove('swiping-left');
             }
-            
-            // 根据滑动距离显示不同的提示
-            this.updateActionHint(element, Math.abs(translateX), maxSwipeDistance);
         }
     }
     
@@ -243,7 +233,7 @@ class ElegantNoteApp {
                 this.togglePinHistoryItemWithAnimation(element);
             }
         } else {
-            // 恢复位置
+            // 恢复颜色
             this.resetSwipePosition(element);
             
             // 如果没有滑动，则视为点击
@@ -275,7 +265,6 @@ class ElegantNoteApp {
         };
         
         item.classList.remove('swiping-left', 'swiping-right');
-        item.style.transform = '';
         item.style.transition = 'none';
     }
     
@@ -295,22 +284,13 @@ class ElegantNoteApp {
         }
         
         if (this.currentSwipeItem.isSwiping) {
-            const maxSwipeDistance = 80;
-            let translateX = 0;
-            
             if (this.currentSwipeItem.direction === 'left') {
-                translateX = Math.max(diffX, -maxSwipeDistance);
-                element.style.transform = `translate3d(${translateX}px, 0, 0)`;
                 element.classList.add('swiping-left');
                 element.classList.remove('swiping-right');
             } else if (this.currentSwipeItem.direction === 'right') {
-                translateX = Math.min(diffX, maxSwipeDistance);
-                element.style.transform = `translate3d(${translateX}px, 0, 0)`;
                 element.classList.add('swiping-right');
                 element.classList.remove('swiping-left');
             }
-            
-            this.updateActionHint(element, Math.abs(translateX), maxSwipeDistance);
         }
     }
     
@@ -337,27 +317,10 @@ class ElegantNoteApp {
         this.currentSwipeItem = null;
     }
     
-    // 更新操作提示
-    updateActionHint(element, currentDistance, maxDistance) {
-        const progress = currentDistance / maxDistance;
-        const hints = element.querySelectorAll('.action-hints');
-        
-        hints.forEach(hint => {
-            hint.style.opacity = Math.min(progress * 1.5, 1);
-        });
-    }
-    
     // 重置滑动位置
     resetSwipePosition(element) {
-        element.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-        element.style.transform = 'translate3d(0, 0, 0)';
+        element.style.transition = 'background 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
         element.classList.remove('swiping-left', 'swiping-right');
-        
-        // 隐藏所有提示
-        const hints = element.querySelectorAll('.action-hints');
-        hints.forEach(hint => {
-            hint.style.opacity = '0';
-        });
     }
     
     autoFocus() {
@@ -550,19 +513,9 @@ class ElegantNoteApp {
             div.className = `history-item ${item.pinned ? 'pinned' : ''} ${originalIndex === this.editingIndex ? 'active' : ''}`;
             div.setAttribute('data-index', originalIndex);
             
-            // 根据是否置顶显示不同的提示文字
-            const pinText = item.pinned ? '取消置顶' : '置顶';
-            const pinIcon = item.pinned ? '📍' : '📌';
-            
             div.innerHTML = `
                 <div class="history-content">${this.escapeHtml(item.content)}</div>
                 <div class="history-time">${this.formatCreateTime(item.timestamp)}</div>
-                <div class="action-hints delete-hint">
-                    <span>🗑️ 删除</span>
-                </div>
-                <div class="action-hints pin-hint">
-                    <span>${pinIcon} ${pinText}</span>
-                </div>
             `;
             
             fragment.appendChild(div);

@@ -308,6 +308,19 @@ body {
   font-weight: 600;
 }
 
+/* 滑动状态 - 简化为纯颜色变化 */
+.history-item.swiping-left {
+  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
+  border-color: rgba(244, 67, 54, 0.3);
+  transition: none;
+}
+
+.history-item.swiping-right {
+  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
+  border-color: rgba(255, 193, 7, 0.3);
+  transition: none;
+}
+
 .history-content {
   font-size: 17px;
   line-height: 1.65;
@@ -334,61 +347,6 @@ body {
   content: '🕒';
   margin-right: 6px;
   font-size: 12px;
-}
-
-/* 滑动操作提示 - 完全重新设计 */
-.action-hints {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity var(--transition-fast);
-  pointer-events: none;
-  z-index: 5;
-  font-weight: 600;
-  font-size: 14px;
-  color: white;
-  width: 80px;
-}
-
-/* 删除提示 - 在右侧 */
-.delete-hint {
-  right: -80px;
-  background: var(--danger-gradient);
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-}
-
-/* 置顶提示 - 在左侧 */
-.pin-hint {
-  left: -80px;
-  background: var(--warning-gradient);
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-}
-
-/* 滑动状态 */
-.history-item.swiping-left .delete-hint {
-  opacity: 1;
-  right: 0;
-}
-
-.history-item.swiping-right .pin-hint {
-  opacity: 1;
-  left: 0;
-}
-
-.history-item.swiping-left {
-  background: linear-gradient(135deg, #ffeef0 0%, #fff0f0 100%);
-  transition: none;
-  transform: translate3d(-80px, 0, 0);
-}
-
-.history-item.swiping-right {
-  background: linear-gradient(135deg, #fff3e0 0%, #ffecb3 100%);
-  transition: none;
-  transform: translate3d(80px, 0, 0);
 }
 
 /* 滑动删除和置顶动画 */
@@ -759,6 +717,17 @@ body {
   
   .history-item.pinned .history-time {
     color: #ffcc80;
+  }
+  
+  /* 深色模式下的滑动颜色 */
+  .history-item.swiping-left {
+    background: linear-gradient(135deg, #4a1c1c 0%, #6b2b2b 100%);
+    border-color: rgba(244, 67, 54, 0.3);
+  }
+  
+  .history-item.swiping-right {
+    background: linear-gradient(135deg, #4a3f1c 0%, #6b5d2b 100%);
+    border-color: rgba(255, 193, 7, 0.3);
   }
 }
 
