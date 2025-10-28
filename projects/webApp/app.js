@@ -1,470 +1,487 @@
-// app.js - 完整的WebRTC实现（修复版）
-class DecentralizedMessenger {
-    constructor() {
-        this.peerConnection = null;
-        this.dataChannel = null;
-        this.localId = this.generateId();
-        this.remoteId = '';
-        this.isConnected = false;
-        this.connectionTimeout = null;
-        this.iceCandidatesReceived = 0;
-        this.signalingServer = this.createSignalingServer();
-        
-        this.initializeApp();
-        this.setupEventListeners();
-        this.generateQRCode();
+// 全局变量
+let peerConnection = null;
+let dataChannel = null;
+let isInitiator = false;
+let connectionStartTime = null;
+
+// DOM元素
+const statusIndicator = document.getElementById('statusIndicator');
+const statusText = document.getElementById('statusText');
+const webrtcStatus = document.getElementById('webrtcStatus');
+const dataChannelStatus = document.getElementById('dataChannelStatus');
+const iceStatus = document.getElementById('iceStatus');
+const createBtn = document.getElementById('createBtn');
+const connectBtn = document.getElementById('connectBtn');
+const disconnectBtn = document.getElementById('disconnectBtn');
+const connectionCodeContainer = document.getElementById('connectionCodeContainer');
+const connectionCode = document.getElementById('connectionCode');
+const copyCodeBtn = document.getElementById('copyCodeBtn');
+const messagesContainer = document.getElementById('messages');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const logContent = document.getElementById('logContent');
+
+// 日志系统
+function addLog(message, type = 'info') {
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry`;
+    
+    const time = new Date().toLocaleTimeString();
+    const messageElement = document.createElement('span');
+    messageElement.className = `log-${type}`;
+    messageElement.textContent = message;
+    
+    logEntry.innerHTML = `<span class="log-time">[${time}]</span> `;
+    logEntry.appendChild(messageElement);
+    
+    logContent.appendChild(logEntry);
+    logContent.scrollTop = logContent.scrollHeight;
+    
+    console.log(`[${type.toUpperCase()}] ${message}`);
+}
+
+// 更新连接状态
+function updateStatus(text, state) {
+    statusText.textContent = text;
+    
+    // 移除所有状态类
+    statusIndicator.className = 'status-indicator';
+    
+    // 根据状态添加对应的类
+    switch(state) {
+        case 'connected':
+            statusIndicator.classList.add('connected');
+            break;
+        case 'connecting':
+            statusIndicator.classList.add('connecting');
+            break;
+        case 'error':
+            statusIndicator.classList.add('error');
+            break;
+        default:
+            // 保持默认的红色状态
+            break;
     }
     
-    // 生成随机ID
-    generateId() {
-        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    // 启用/禁用输入框和发送按钮
+    const isConnected = state === 'connected';
+    messageInput.disabled = !isConnected;
+    sendBtn.disabled = !isConnected;
+    
+    // 显示/隐藏断开连接按钮
+    disconnectBtn.style.display = (state === 'connected' || state === 'connecting') ? 'block' : 'none';
+}
+
+// 更新详细状态
+function updateDetailedStatus(webrtcState, dataChannelState, iceState) {
+    if (webrtcState) {
+        webrtcStatus.textContent = webrtcState;
+        webrtcStatus.className = getStatusClass(webrtcState);
     }
     
-    // 模拟信令服务器（在实际应用中需要真实服务器）
-    createSignalingServer() {
-        return {
-            sendSignal: (to, signal) => {
-                this.log(`发送信令到 ${to}: ${signal.type}`, 'info');
-                // 模拟网络延迟
-                setTimeout(() => {
-                    if (typeof window !== 'undefined' && window.receiveSignal) {
-                        window.receiveSignal(this.localId, signal);
-                    }
-                }, 300);
-            },
-            
-            listen: (callback) => {
-                window.receiveSignal = (from, signal) => {
-                    this.log(`收到来自 ${from} 的信令: ${signal.type}`, 'info');
-                    callback(from, signal);
-                };
-            }
-        };
+    if (dataChannelState) {
+        dataChannelStatus.textContent = dataChannelState;
+        dataChannelStatus.className = getStatusClass(dataChannelState);
     }
     
-    // 初始化应用
-    initializeApp() {
-        document.getElementById('peer-id').value = this.localId;
-        this.updateStatus('离线', false);
-        
-        // 监听信令
-        this.signalingServer.listen((from, signal) => {
-            this.handleSignaling(from, signal);
-        });
-    }
-    
-    // 设置事件监听
-    setupEventListeners() {
-        document.getElementById('copy-id').addEventListener('click', () => {
-            this.copyToClipboard(this.localId);
-            this.showMessage('ID已复制到剪贴板');
-        });
-        
-        document.getElementById('connect-btn').addEventListener('click', () => {
-            this.remoteId = document.getElementById('remote-id').value.trim();
-            if (this.remoteId) {
-                this.initiateConnection();
-            } else {
-                this.showMessage('请输入对方ID');
-            }
-        });
-        
-        document.getElementById('disconnect-btn').addEventListener('click', () => {
-            this.disconnect();
-        });
-        
-        document.getElementById('message-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                this.sendMessage();
-            }
-        });
-        
-        document.getElementById('send-btn').addEventListener('click', () => {
-            this.sendMessage();
-        });
-        
-        // 新增手动连接按钮
-        document.getElementById('manual-connect').addEventListener('click', () => {
-            this.manualCompleteConnection();
-        });
-        
-        // 新增状态检查按钮
-        document.getElementById('check-status').addEventListener('click', () => {
-            this.checkConnectionStatus();
-        });
-    }
-    
-    // 生成二维码
-    generateQRCode() {
-        const qr = qrcode(0, 'M');
-        qr.addData(JSON.stringify({
-            type: 'decentralized-messenger',
-            id: this.localId,
-            version: '1.0'
-        }));
-        qr.make();
-        
-        const qrContainer = document.getElementById('qrcode');
-        qrContainer.innerHTML = qr.createImgTag(4);
-    }
-    
-    // 初始化连接
-    async initiateConnection() {
-        this.log('开始建立P2P连接...', 'info');
-        this.iceCandidatesReceived = 0;
-        
-        try {
-            // 创建RTCPeerConnection
-            this.peerConnection = new RTCPeerConnection({
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478' }
-                ]
-            });
-            
-            // 设置数据通道
-            this.setupDataChannel();
-            
-            // 监听ICE候选
-            this.peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    this.signalingServer.sendSignal(this.remoteId, {
-                        type: 'ice-candidate',
-                        candidate: event.candidate
-                    });
-                } else {
-                    this.log('ICE候选收集完成', 'success');
-                    // ICE候选收集完成，检查连接状态
-                    setTimeout(() => this.checkAndCompleteConnection(), 1000);
-                }
-            };
-            
-            // 监听连接状态变化
-            this.peerConnection.onconnectionstatechange = () => {
-                this.log(`连接状态变更为: ${this.peerConnection.connectionState}`, 'info');
-                if (this.peerConnection.connectionState === 'connected') {
-                    this.log('检测到连接状态已变为connected!', 'success');
-                    this.completeConnection();
-                }
-            };
-            
-            // 创建offer
-            const offer = await this.peerConnection.createOffer();
-            await this.peerConnection.setLocalDescription(offer);
-            
-            this.signalingServer.sendSignal(this.remoteId, {
-                type: 'offer',
-                offer: offer
-            });
-            
-            this.log('已发送连接邀请', 'success');
-            
-            // 设置连接超时
-            this.connectionTimeout = setTimeout(() => {
-                if (!this.isConnected) {
-                    this.log('连接超时，尝试自动完成...', 'warning');
-                    this.manualCompleteConnection();
-                }
-            }, 8000);
-            
-        } catch (error) {
-            this.log('创建连接失败: ' + error.message, 'error');
-            this.showMessage('连接失败: ' + error.message);
-        }
-    }
-    
-    // 设置数据通道
-    setupDataChannel() {
-        // 创建数据通道
-        this.dataChannel = this.peerConnection.createDataChannel('chat', {
-            ordered: true
-        });
-        
-        this.setupDataChannelEvents(this.dataChannel);
-        
-        // 监听对方创建的数据通道
-        this.peerConnection.ondatachannel = (event) => {
-            this.dataChannel = event.channel;
-            this.setupDataChannelEvents(this.dataChannel);
-            this.log('对方数据通道已建立', 'success');
-        };
-    }
-    
-    // 设置数据通道事件
-    setupDataChannelEvents(channel) {
-        channel.onopen = () => {
-            if (this.connectionTimeout) {
-                clearTimeout(this.connectionTimeout);
-            }
-            this.log('P2P数据通道已打开!', 'success');
-            this.completeConnection();
-        };
-        
-        channel.onclose = () => {
-            this.log('数据通道已关闭', 'warning');
-            this.isConnected = false;
-            this.updateStatus('离线', false);
-            this.showMessage('连接已断开');
-        };
-        
-        channel.onmessage = (event) => {
-            this.displayMessage(event.data, 'received');
-        };
-        
-        channel.onerror = (error) => {
-            this.log('数据通道错误: ' + error, 'error');
-        };
-    }
-    
-    // 处理信令消息
-    async handleSignaling(from, signal) {
-        if (!this.peerConnection) {
-            this.peerConnection = new RTCPeerConnection({
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478' }
-                ]
-            });
-            
-            this.setupDataChannel();
-            
-            this.peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    this.signalingServer.sendSignal(from, {
-                        type: 'ice-candidate',
-                        candidate: event.candidate
-                    });
-                } else {
-                    this.log('ICE候选收集完成', 'success');
-                    setTimeout(() => this.checkAndCompleteConnection(), 1000);
-                }
-            };
-            
-            this.peerConnection.onconnectionstatechange = () => {
-                this.log(`连接状态变更为: ${this.peerConnection.connectionState}`, 'info');
-                if (this.peerConnection.connectionState === 'connected') {
-                    this.completeConnection();
-                }
-            };
-        }
-        
-        try {
-            switch (signal.type) {
-                case 'offer':
-                    await this.peerConnection.setRemoteDescription(signal.offer);
-                    const answer = await this.peerConnection.createAnswer();
-                    await this.peerConnection.setLocalDescription(answer);
-                    
-                    this.signalingServer.sendSignal(from, {
-                        type: 'answer',
-                        answer: answer
-                    });
-                    this.remoteId = from;
-                    this.log('已回复连接请求', 'success');
-                    break;
-                    
-                case 'answer':
-                    await this.peerConnection.setRemoteDescription(signal.answer);
-                    this.remoteId = from;
-                    this.log('已处理对方应答', 'success');
-                    break;
-                    
-                case 'ice-candidate':
-                    await this.peerConnection.addIceCandidate(signal.candidate);
-                    this.iceCandidatesReceived++;
-                    this.log(`已接收ICE候选 (${this.iceCandidatesReceived})`, 'info');
-                    
-                    // 收到一定数量的ICE候选后检查连接
-                    if (this.iceCandidatesReceived >= 3) {
-                        setTimeout(() => this.checkAndCompleteConnection(), 1500);
-                    }
-                    break;
-            }
-        } catch (error) {
-            this.log('处理信令失败: ' + error.message, 'error');
-        }
-    }
-    
-    // 检查并完成连接
-    checkAndCompleteConnection() {
-        if (this.isConnected) return;
-        
-        if (this.peerConnection && this.peerConnection.connectionState === 'connected') {
-            this.log('自动检测到连接已建立', 'success');
-            this.completeConnection();
-        } else if (this.dataChannel && this.dataChannel.readyState === 'open') {
-            this.log('数据通道已就绪', 'success');
-            this.completeConnection();
-        } else {
-            this.log('等待连接建立...', 'info');
-        }
-    }
-    
-    // 完成连接
-    completeConnection() {
-        if (this.connectionTimeout) {
-            clearTimeout(this.connectionTimeout);
-        }
-        
-        this.isConnected = true;
-        this.updateStatus('已连接', true);
-        this.switchToChatPanel();
-        this.showMessage('连接成功！现在可以开始聊天了');
-        this.log('P2P连接已完全建立！', 'success');
-        
-        // 发送测试消息
-        setTimeout(() => {
-            if (this.dataChannel && this.dataChannel.readyState === 'open') {
-                try {
-                    this.dataChannel.send('连接测试消息');
-                    this.displayMessage('连接测试消息', 'sent');
-                } catch (e) {
-                    this.log('测试消息发送失败: ' + e, 'error');
-                }
-            }
-        }, 500);
-    }
-    
-    // 手动完成连接
-    manualCompleteConnection() {
-        this.log('手动触发连接完成...', 'warning');
-        this.completeConnection();
-    }
-    
-    // 检查连接状态
-    checkConnectionStatus() {
-        let status = '未知';
-        if (this.peerConnection) {
-            status = `PeerConnection: ${this.peerConnection.connectionState}, ICE: ${this.peerConnection.iceConnectionState}`;
-        }
-        if (this.dataChannel) {
-            status += `, DataChannel: ${this.dataChannel.readyState}`;
-        }
-        this.log(`状态检查: ${status}`, 'info');
-        this.showMessage(`连接状态: ${status}`);
-    }
-    
-    // 发送消息
-    sendMessage() {
-        const input = document.getElementById('message-input');
-        const message = input.value.trim();
-        
-        if (!message || !this.isConnected || !this.dataChannel) {
-            if (!this.isConnected) {
-                this.showMessage('未建立连接，无法发送消息');
-            }
-            return;
-        }
-        
-        try {
-            this.dataChannel.send(message);
-            this.displayMessage(message, 'sent');
-            input.value = '';
-        } catch (error) {
-            this.log('发送消息失败: ' + error, 'error');
-            this.showMessage('发送失败: ' + error.message);
-        }
-    }
-    
-    // 显示消息
-    displayMessage(text, type) {
-        const messagesContainer = document.getElementById('messages');
-        const messageElement = document.createElement('div');
-        messageElement.className = `message ${type}`;
-        messageElement.textContent = text;
-        
-        // 添加时间戳
-        const timestamp = new Date().toLocaleTimeString();
-        const timeElement = document.createElement('div');
-        timeElement.className = 'message-time';
-        timeElement.textContent = timestamp;
-        timeElement.style.fontSize = '0.7rem';
-        timeElement.style.opacity = '0.7';
-        timeElement.style.marginTop = '5px';
-        
-        messageElement.appendChild(timeElement);
-        messagesContainer.appendChild(messageElement);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    }
-    
-    // 切换到聊天面板
-    switchToChatPanel() {
-        document.getElementById('connect-panel').classList.remove('active');
-        document.getElementById('chat-panel').classList.add('active');
-        document.getElementById('peer-name').textContent = this.remoteId;
-    }
-    
-    // 切换到连接面板
-    switchToConnectPanel() {
-        document.getElementById('chat-panel').classList.remove('active');
-        document.getElementById('connect-panel').classList.add('active');
-    }
-    
-    // 断开连接
-    disconnect() {
-        if (this.dataChannel) {
-            this.dataChannel.close();
-        }
-        if (this.peerConnection) {
-            this.peerConnection.close();
-        }
-        if (this.connectionTimeout) {
-            clearTimeout(this.connectionTimeout);
-        }
-        
-        this.isConnected = false;
-        this.dataChannel = null;
-        this.peerConnection = null;
-        this.iceCandidatesReceived = 0;
-        
-        this.updateStatus('离线', false);
-        this.switchToConnectPanel();
-        this.showMessage('已断开连接');
-        
-        // 清空消息
-        document.getElementById('messages').innerHTML = '';
-        document.getElementById('remote-id').value = '';
-        this.log('连接已重置', 'info');
-    }
-    
-    // 更新状态
-    updateStatus(text, isConnected) {
-        const statusElement = document.getElementById('status');
-        statusElement.textContent = text;
-        
-        if (isConnected) {
-            statusElement.classList.add('connected');
-        } else {
-            statusElement.classList.remove('connected');
-        }
-    }
-    
-    // 记录信令日志
-    log(message, type = 'info') {
-        const logContainer = document.getElementById('signaling-log');
-        const logEntry = document.createElement('div');
-        logEntry.className = `log-entry log-${type}`;
-        logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-        
-        logContainer.appendChild(logEntry);
-        logContainer.scrollTop = logContainer.scrollHeight;
-    }
-    
-    // 复制到剪贴板
-    copyToClipboard(text) {
-        navigator.clipboard.writeText(text).catch(err => {
-            console.error('复制失败: ', err);
-        });
-    }
-    
-    // 显示临时消息
-    showMessage(text) {
-        // 简单的alert，可以替换为更优雅的toast
-        alert(text);
+    if (iceState) {
+        iceStatus.textContent = iceState;
+        iceStatus.className = getStatusClass(iceState);
     }
 }
 
-// 初始化应用
-document.addEventListener('DOMContentLoaded', () => {
-    new DecentralizedMessenger();
+function getStatusClass(state) {
+    if (state.includes('连接') || state.includes('成功') || state.includes('完成')) {
+        return 'ready';
+    } else if (state.includes('等待') || state.includes('进行中') || state.includes('连接中')) {
+        return 'connecting';
+    } else if (state.includes('失败') || state.includes('错误') || state.includes('断开')) {
+        return 'error';
+    }
+    return '';
+}
+
+// 重置连接状态
+function resetConnection() {
+    if (peerConnection) {
+        peerConnection.close();
+        peerConnection = null;
+    }
+    dataChannel = null;
+    connectionCodeContainer.style.display = 'none';
+    updateStatus('连接已重置', 'disconnected');
+    updateDetailedStatus('未初始化', '未连接', '未开始');
+    addLog('连接已重置', 'info');
+}
+
+// 创建对等连接
+function createConnection() {
+    connectionStartTime = Date.now();
+    isInitiator = true;
+    
+    addLog('开始创建连接...', 'info');
+    updateStatus('正在创建连接...', 'connecting');
+    updateDetailedStatus('初始化中...', '准备创建', '等待开始');
+    
+    try {
+        // 配置STUN服务器
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ],
+            iceCandidatePoolSize: 10
+        };
+        
+        addLog('创建RTCPeerConnection实例', 'info');
+        peerConnection = new RTCPeerConnection(configuration);
+        
+        // 设置连接状态监听
+        setupConnectionListeners();
+        
+        addLog('创建数据通道', 'info');
+        dataChannel = peerConnection.createDataChannel('chat', {
+            ordered: true
+        });
+        setupDataChannel();
+        
+        addLog('创建Offer...', 'info');
+        return peerConnection.createOffer()
+            .then(offer => {
+                addLog('Offer创建成功，设置本地描述', 'success');
+                return peerConnection.setLocalDescription(offer);
+            })
+            .then(() => {
+                const offer = peerConnection.localDescription;
+                addLog('本地描述设置完成', 'success');
+                
+                // 显示连接代码
+                const code = btoa(JSON.stringify(offer));
+                connectionCode.textContent = code;
+                connectionCodeContainer.style.display = 'block';
+                
+                updateStatus('等待对方加入连接...', 'connecting');
+                updateDetailedStatus('等待应答', '等待连接', '收集候选');
+                
+                addLog('连接代码已生成，请分享给对方', 'success');
+                addMessage('已创建连接，请将代码分享给对方', 'received', '系统消息');
+                
+                // 设置超时检查
+                setTimeout(() => {
+                    if (peerConnection && peerConnection.connectionState !== 'connected') {
+                        addLog('连接超时，请检查网络或重新创建连接', 'warning');
+                        updateStatus('连接超时', 'error');
+                    }
+                }, 30000);
+            })
+            .catch(error => {
+                addLog(`创建连接失败: ${error.message}`, 'error');
+                updateStatus('创建连接失败', 'error');
+                updateDetailedStatus('初始化失败', '创建失败', '错误');
+                throw error;
+            });
+            
+    } catch (error) {
+        addLog(`创建连接时发生错误: ${error.message}`, 'error');
+        updateStatus('创建连接失败', 'error');
+        return Promise.reject(error);
+    }
+}
+
+// 加入连接
+function joinConnection() {
+    connectionStartTime = Date.now();
+    isInitiator = false;
+    
+    const code = prompt('请输入对方提供的连接代码:');
+    if (!code) {
+        addLog('用户取消输入连接代码', 'warning');
+        return;
+    }
+    
+    addLog('开始加入连接...', 'info');
+    updateStatus('正在加入连接...', 'connecting');
+    updateDetailedStatus('初始化中...', '等待通道', '等待开始');
+    
+    try {
+        const offer = JSON.parse(atob(code));
+        addLog('连接代码解析成功', 'success');
+        
+        // 配置STUN服务器
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ],
+            iceCandidatePoolSize: 10
+        };
+        
+        addLog('创建RTCPeerConnection实例', 'info');
+        peerConnection = new RTCPeerConnection(configuration);
+        
+        // 设置连接状态监听
+        setupConnectionListeners();
+        
+        // 设置数据通道回调
+        peerConnection.ondatachannel = (event) => {
+            addLog('数据通道已建立', 'success');
+            dataChannel = event.channel;
+            setupDataChannel();
+        };
+        
+        addLog('设置远程描述...', 'info');
+        return peerConnection.setRemoteDescription(offer)
+            .then(() => {
+                addLog('远程描述设置成功', 'success');
+                updateDetailedStatus('创建应答中...', '等待通道', '收集候选');
+                return peerConnection.createAnswer();
+            })
+            .then(answer => {
+                addLog('Answer创建成功', 'success');
+                return peerConnection.setLocalDescription(answer);
+            })
+            .then(() => {
+                addLog('本地描述设置完成', 'success');
+                updateStatus('连接建立中...', 'connecting');
+                updateDetailedStatus('等待连接', '等待打开', '建立连接');
+                addMessage('正在建立连接...', 'received', '系统消息');
+                
+                // 设置超时检查
+                setTimeout(() => {
+                    if (peerConnection && peerConnection.connectionState !== 'connected') {
+                        addLog('连接超时，请检查网络或重新尝试', 'warning');
+                        updateStatus('连接超时', 'error');
+                    }
+                }, 30000);
+            })
+            .catch(error => {
+                addLog(`加入连接失败: ${error.message}`, 'error');
+                updateStatus('加入连接失败', 'error');
+                updateDetailedStatus('连接失败', '连接失败', '错误');
+                throw error;
+            });
+            
+    } catch (error) {
+        addLog(`加入连接时发生错误: ${error.message}`, 'error');
+        if (error instanceof SyntaxError) {
+            addLog('连接代码格式错误，请检查代码是否正确', 'error');
+            alert('无效的连接代码！请检查代码是否正确。');
+        }
+        updateStatus('加入连接失败', 'error');
+        return Promise.reject(error);
+    }
+}
+
+// 设置连接监听器
+function setupConnectionListeners() {
+    // 处理ICE候选
+    peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+            addLog(`ICE候选收集: ${event.candidate.type}`, 'info');
+            updateDetailedStatus(null, null, '收集候选中');
+        } else {
+            addLog('ICE候选收集完成', 'success');
+            updateDetailedStatus(null, null, '候选收集完成');
+        }
+    };
+    
+    // ICE连接状态
+    peerConnection.oniceconnectionstatechange = () => {
+        const state = peerConnection.iceConnectionState;
+        addLog(`ICE连接状态: ${state}`, 'info');
+        
+        switch(state) {
+            case 'checking':
+                updateDetailedStatus(null, null, '检查连接中');
+                break;
+            case 'connected':
+            case 'completed':
+                updateDetailedStatus(null, null, '连接成功');
+                const connectionTime = Date.now() - connectionStartTime;
+                addLog(`ICE连接建立成功，耗时: ${connectionTime}ms`, 'success');
+                break;
+            case 'disconnected':
+                updateDetailedStatus(null, null, '连接断开');
+                addLog('ICE连接断开', 'warning');
+                break;
+            case 'failed':
+                updateDetailedStatus(null, null, '连接失败');
+                addLog('ICE连接失败', 'error');
+                break;
+        }
+    };
+    
+    // 连接状态
+    peerConnection.onconnectionstatechange = () => {
+        const state = peerConnection.connectionState;
+        addLog(`WebRTC连接状态: ${state}`, 'info');
+        
+        switch(state) {
+            case 'connecting':
+                updateStatus('连接建立中...', 'connecting');
+                updateDetailedStatus('连接中', null, null);
+                break;
+            case 'connected':
+                updateStatus('连接成功！', 'connected');
+                updateDetailedStatus('已连接', null, null);
+                const totalTime = Date.now() - connectionStartTime;
+                addLog(`连接建立完成！总耗时: ${totalTime}ms`, 'success');
+                addMessage('连接已建立，可以开始聊天了', 'received', '系统消息');
+                break;
+            case 'disconnected':
+                updateStatus('连接断开', 'error');
+                updateDetailedStatus('已断开', '已关闭', '已断开');
+                addLog('连接已断开', 'warning');
+                addMessage('连接已断开', 'received', '系统消息');
+                break;
+            case 'failed':
+                updateStatus('连接失败', 'error');
+                updateDetailedStatus('连接失败', '连接失败', '连接失败');
+                addLog('连接失败', 'error');
+                addMessage('连接失败，请重试', 'received', '系统消息');
+                break;
+        }
+    };
+    
+    // ICE收集状态
+    peerConnection.onicegatheringstatechange = () => {
+        const state = peerConnection.iceGatheringState;
+        addLog(`ICE收集状态: ${state}`, 'info');
+    };
+}
+
+// 设置数据通道
+function setupDataChannel() {
+    dataChannel.onopen = () => {
+        addLog('数据通道已打开', 'success');
+        updateDetailedStatus(null, '已连接', null);
+        updateStatus('连接成功！', 'connected');
+    };
+    
+    dataChannel.onclose = () => {
+        addLog('数据通道已关闭', 'warning');
+        updateDetailedStatus(null, '已关闭', null);
+    };
+    
+    dataChannel.onmessage = (event) => {
+        addLog(`收到消息: ${event.data}`, 'info');
+        addMessage(event.data, 'received');
+    };
+    
+    dataChannel.onerror = (error) => {
+        addLog(`数据通道错误: ${error.message}`, 'error');
+        updateDetailedStatus(null, '错误', null);
+    };
+    
+    // 监听数据通道状态
+    const checkDataChannelState = () => {
+        if (dataChannel) {
+            const state = dataChannel.readyState;
+            if (state === 'connecting') {
+                updateDetailedStatus(null, '连接中', null);
+            } else if (state === 'open') {
+                updateDetailedStatus(null, '已连接', null);
+            }
+        }
+    };
+    
+    // 初始检查
+    checkDataChannelState();
+}
+
+// 发送消息
+function sendMessage() {
+    const message = messageInput.value.trim();
+    if (!message || !dataChannel || dataChannel.readyState !== 'open') {
+        addLog('无法发送消息: 连接未就绪', 'warning');
+        return;
+    }
+    
+    try {
+        dataChannel.send(message);
+        addLog(`发送消息: ${message}`, 'info');
+        addMessage(message, 'sent');
+        messageInput.value = '';
+    } catch (error) {
+        addLog(`发送消息失败: ${error.message}`, 'error');
+        addMessage('发送失败，连接可能已断开', 'received', '系统消息');
+    }
+}
+
+// 断开连接
+function disconnect() {
+    addLog('用户主动断开连接', 'info');
+    resetConnection();
+    addMessage('连接已断开', 'received', '系统消息');
+}
+
+// 添加消息到聊天界面
+function addMessage(text, type, sender = '') {
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('message', type);
+    
+    const messageText = document.createElement('div');
+    messageText.classList.add('message-text');
+    messageText.textContent = text;
+    
+    const messageTime = document.createElement('div');
+    messageTime.classList.add('message-time');
+    
+    if (sender) {
+        messageTime.textContent = sender;
+    } else {
+        messageTime.textContent = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+    
+    messageElement.appendChild(messageText);
+    messageElement.appendChild(messageTime);
+    messagesContainer.appendChild(messageElement);
+    
+    // 滚动到底部
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// 复制连接代码
+function copyConnectionCode() {
+    const code = connectionCode.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+        addLog('连接代码已复制到剪贴板', 'success');
+        alert('连接代码已复制到剪贴板！');
+    }).catch(err => {
+        addLog(`复制失败: ${err.message}`, 'error');
+        // 备用方案
+        const textArea = document.createElement('textarea');
+        textArea.value = code;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        addLog('连接代码已复制到剪贴板(备用方案)', 'success');
+        alert('连接代码已复制到剪贴板！');
+    });
+}
+
+// 事件监听
+createBtn.addEventListener('click', createConnection);
+connectBtn.addEventListener('click', joinConnection);
+disconnectBtn.addEventListener('click', disconnect);
+sendBtn.addEventListener('click', sendMessage);
+copyCodeBtn.addEventListener('click', copyConnectionCode);
+
+messageInput.addEventListener('keypress', (event) => {
+    if (event.key === 'Enter') {
+        sendMessage();
+    }
 });
+
+// 页面卸载时清理
+window.addEventListener('beforeunload', () => {
+    if (peerConnection) {
+        peerConnection.close();
+    }
+});
+
+// 初始状态
+addLog('应用初始化完成', 'success');
+updateStatus('等待连接...', 'disconnected');
+updateDetailedStatus('未初始化', '未连接', '未开始');

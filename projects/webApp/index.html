@@ -3,68 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Decentralized Messenger</title>
+    <title>去中心化即时通讯</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app-container">
-        <header class="app-header">
-            <h1>Decentralized Messenger</h1>
+    <div class="container">
+        <div class="header">
+            <h1>去中心化即时通讯</h1>
+            <p>点对点加密聊天 · 无需服务器</p>
+        </div>
+        
+        <div class="connection-panel">
             <div class="connection-status">
-                <span id="status">离线</span>
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="statusText">等待连接...</span>
             </div>
-        </header>
-
-        <div class="main-content">
-            <!-- 连接面板 -->
-            <div id="connect-panel" class="panel active">
-                <h2>建立连接</h2>
-                <div class="input-group">
-                    <label for="peer-id">你的ID:</label>
-                    <input type="text" id="peer-id" readonly>
-                    <button id="copy-id">复制ID</button>
+            
+            <!-- 详细状态信息 -->
+            <div class="status-details" id="statusDetails">
+                <div class="status-item">
+                    <span class="status-label">WebRTC状态:</span>
+                    <span class="status-value" id="webrtcStatus">未初始化</span>
                 </div>
-                <div class="input-group">
-                    <label for="remote-id">对方ID:</label>
-                    <input type="text" id="remote-id" placeholder="输入对方ID">
-                    <button id="connect-btn">连接</button>
+                <div class="status-item">
+                    <span class="status-label">数据通道:</span>
+                    <span class="status-value" id="dataChannelStatus">未连接</span>
                 </div>
-                <div class="qr-section">
-                    <h3>或扫描二维码连接</h3>
-                    <div id="qrcode"></div>
-                </div>
-                <div class="signaling-status">
-                    <h3>连接状态</h3>
-                    <div id="signaling-log"></div>
-                    <div class="manual-controls">
-                        <button id="manual-connect">手动完成连接</button>
-                        <button id="check-status">检查状态</button>
-                    </div>
+                <div class="status-item">
+                    <span class="status-label">ICE连接:</span>
+                    <span class="status-value" id="iceStatus">未开始</span>
                 </div>
             </div>
-
-            <!-- 聊天面板 -->
-            <div id="chat-panel" class="panel">
-                <div class="chat-header">
-                    <h2 id="chat-with">与 <span id="peer-name">未知用户</span> 聊天</h2>
-                    <button id="disconnect-btn">断开连接</button>
-                </div>
-                <div class="messages-container" id="messages">
-                    <!-- 消息将在这里显示 -->
-                </div>
-                <div class="message-input">
-                    <input type="text" id="message-input" placeholder="输入消息...">
-                    <button id="send-btn">发送</button>
-                </div>
+            
+            <div class="connection-actions">
+                <button id="createBtn">创建连接</button>
+                <button id="connectBtn">加入连接</button>
+                <button id="disconnectBtn" style="display: none;">断开连接</button>
+            </div>
+            
+            <div class="connection-code" id="connectionCodeContainer" style="display: none;">
+                <p>您的连接代码：</p>
+                <div class="code-display" id="connectionCode"></div>
+                <button id="copyCodeBtn">复制代码</button>
+            </div>
+            
+            <!-- 连接日志 -->
+            <div class="connection-log" id="connectionLog">
+                <div class="log-header">连接日志</div>
+                <div class="log-content" id="logContent"></div>
             </div>
         </div>
-
-        <footer class="app-footer">
-            <p>完全去中心化 · 端到端加密 · 无服务器</p>
-        </footer>
+        
+        <div class="chat-container">
+            <div class="messages" id="messages">
+                <div class="message received">
+                    <div class="message-text">欢迎使用去中心化即时通讯！请先建立连接。</div>
+                    <div class="message-time">系统消息</div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="输入消息..." disabled>
+                <button class="send-btn" id="sendBtn" disabled>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M22 2L11 13" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M22 2L15 22L11 13L2 9L22 2Z" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <h3>使用说明</h3>
+            <ul>
+                <li>1. 一方点击"创建连接"，生成连接代码</li>
+                <li>2. 另一方点击"加入连接"，输入连接代码</li>
+                <li>3. 连接成功后即可开始聊天</li>
+                <li>4. 所有消息通过点对点连接直接传输</li>
+            </ul>
+        </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
