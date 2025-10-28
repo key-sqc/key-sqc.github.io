@@ -19,11 +19,11 @@
             <div class="steps">
                 <div class="step">
                     <span class="step-number">1</span>
-                    <span class="step-text">一方点击"创建房间"生成4位房间号</span>
+                    <span class="step-text">一方点击"创建房间"生成二维码</span>
                 </div>
                 <div class="step">
                     <span class="step-number">2</span>
-                    <span class="step-text">另一方点击"加入房间"输入相同房间号</span>
+                    <span class="step-text">另一方点击"加入房间"扫描二维码</span>
                 </div>
                 <div class="step">
                     <span class="step-number">3</span>
@@ -57,34 +57,77 @@
                 <button id="disconnectBtn" class="action-btn danger" style="display: none;">断开连接</button>
             </div>
             
-            <!-- 房间代码显示 -->
-            <div class="room-code-panel" id="roomCodePanel" style="display: none;">
-                <div class="room-code-header">
-                    <h4>🎯 您的房间号</h4>
-                    <p>请将房间号告诉对方</p>
+            <!-- 二维码显示面板 -->
+            <div class="qr-panel" id="qrPanel" style="display: none;">
+                <div class="qr-header">
+                    <h4>📱 扫描二维码加入</h4>
+                    <p>请对方扫描此二维码</p>
                 </div>
-                <div class="room-code-display">
-                    <span id="roomCodeDisplay">0000</span>
+                <div class="qr-code-container">
+                    <canvas id="qrCanvas"></canvas>
                 </div>
-                <div class="room-actions">
-                    <button id="copyRoomBtn" class="action-btn secondary">复制房间号</button>
-                    <button id="shareRoomBtn" class="action-btn primary">分享房间号</button>
+                <div class="manual-code">
+                    <p>或手动输入代码：</p>
+                    <div class="code-display" id="manualCodeDisplay"></div>
+                </div>
+                <div class="qr-actions">
+                    <button id="copyCodeBtn" class="action-btn secondary">复制代码</button>
+                    <button id="refreshQRBtn" class="action-btn primary">刷新二维码</button>
+                    <button id="closeQRBtn" class="action-btn danger">关闭</button>
                 </div>
             </div>
             
-            <!-- 加入房间输入 -->
-            <div class="join-room-panel" id="joinRoomPanel" style="display: none;">
-                <div class="join-room-header">
-                    <h4>🔑 输入房间号</h4>
-                    <p>请输入对方提供的4位房间号</p>
+            <!-- 加入房间面板 -->
+            <div class="join-panel" id="joinPanel" style="display: none;">
+                <div class="join-header">
+                    <h4>🔗 加入房间</h4>
+                    <p>选择加入方式</p>
                 </div>
-                <div class="room-input-container">
-                    <input type="text" id="roomInput" maxlength="4" placeholder="输入4位数字" pattern="[0-9]*">
-                    <div class="input-hint">请输入4位数字房间号</div>
+                <div class="join-options">
+                    <button id="scanQRBtn" class="join-option-btn">
+                        <span class="option-icon">📷</span>
+                        <span class="option-text">扫描二维码</span>
+                    </button>
+                    <button id="manualInputBtn" class="join-option-btn">
+                        <span class="option-icon">⌨️</span>
+                        <span class="option-text">手动输入代码</span>
+                    </button>
                 </div>
-                <div class="room-actions">
-                    <button id="confirmJoinBtn" class="action-btn primary">确认加入</button>
+                <div class="join-actions">
                     <button id="cancelJoinBtn" class="action-btn secondary">取消</button>
+                </div>
+            </div>
+            
+            <!-- 手动输入面板 -->
+            <div class="manual-input-panel" id="manualInputPanel" style="display: none;">
+                <div class="manual-header">
+                    <h4>⌨️ 输入连接代码</h4>
+                    <p>请输入对方提供的连接代码</p>
+                </div>
+                <div class="input-container">
+                    <textarea id="connectionInput" placeholder="粘贴连接代码..." rows="4"></textarea>
+                    <div class="input-hint">请粘贴完整的连接代码</div>
+                </div>
+                <div class="manual-actions">
+                    <button id="confirmManualBtn" class="action-btn primary">确认加入</button>
+                    <button id="backToJoinBtn" class="action-btn secondary">返回</button>
+                </div>
+            </div>
+            
+            <!-- 二维码扫描面板 -->
+            <div class="scan-panel" id="scanPanel" style="display: none;">
+                <div class="scan-header">
+                    <h4>📷 扫描二维码</h4>
+                    <p>对准对方设备的二维码</p>
+                </div>
+                <div class="scanner-container">
+                    <video id="scannerVideo" playsinline></video>
+                    <canvas id="scannerCanvas" style="display: none;"></canvas>
+                    <div class="scan-frame"></div>
+                </div>
+                <div class="scan-actions">
+                    <button id="cancelScanBtn" class="action-btn secondary">取消扫描</button>
+                    <button id="switchCameraBtn" class="action-btn secondary">切换摄像头</button>
                 </div>
             </div>
             
@@ -104,6 +147,10 @@
         </div>
         
         <div class="chat-container" id="chatContainer" style="display: none;">
+            <div class="chat-header">
+                <span>私密聊天</span>
+                <span class="connection-info">已连接</span>
+            </div>
             <div class="messages" id="messages">
                 <div class="message received">
                     <div class="message-text">连接已建立！现在可以开始私密聊天了。</div>
@@ -122,6 +169,65 @@
             </div>
         </div>
     </div>
+
+    <!-- 简单的QR码生成库 -->
+    <script>
+        // 简化的QR码生成器
+        class SimpleQRCode {
+            static generate(text, canvas, size = 200) {
+                const ctx = canvas.getContext('2d');
+                canvas.width = size;
+                canvas.height = size;
+                
+                // 清空画布
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, size, size);
+                
+                // 简单的QR码模式 - 使用数据URL编码
+                const encodedText = btoa(encodeURIComponent(text));
+                this.drawPattern(ctx, encodedText, size);
+            }
+            
+            static drawPattern(ctx, data, size) {
+                const moduleSize = 4;
+                const padding = 10;
+                
+                ctx.fillStyle = 'black';
+                
+                // 绘制定位图案
+                this.drawFinderPattern(ctx, padding, padding, moduleSize);
+                this.drawFinderPattern(ctx, size - padding - 7 * moduleSize, padding, moduleSize);
+                this.drawFinderPattern(ctx, padding, size - padding - 7 * moduleSize, moduleSize);
+                
+                // 简单数据编码
+                let x = padding + 9 * moduleSize;
+                let y = padding + 9 * moduleSize;
+                
+                for (let i = 0; i < data.length; i++) {
+                    const charCode = data.charCodeAt(i);
+                    for (let bit = 0; bit < 8; bit++) {
+                        if (charCode & (1 << bit)) {
+                            ctx.fillRect(x, y, moduleSize, moduleSize);
+                        }
+                        x += moduleSize;
+                        if (x >= size - padding - moduleSize) {
+                            x = padding + 9 * moduleSize;
+                            y += moduleSize;
+                        }
+                    }
+                }
+            }
+            
+            static drawFinderPattern(ctx, x, y, moduleSize) {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(x, y, 7 * moduleSize, 7 * moduleSize);
+                ctx.fillStyle = 'white';
+                ctx.fillRect(x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize);
+                ctx.fillStyle = 'black';
+                ctx.fillRect(x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize);
+            }
+        }
+    </script>
 
     <script src="app.js"></script>
 </body>

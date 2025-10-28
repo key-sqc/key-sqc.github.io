@@ -252,8 +252,8 @@ body {
     box-shadow: none;
 }
 
-/* 房间代码面板 */
-.room-code-panel, .join-room-panel {
+/* 二维码面板 */
+.qr-panel, .join-panel, .manual-input-panel, .scan-panel {
     background: #f8f9ff;
     padding: 25px;
     border-radius: 15px;
@@ -262,65 +262,155 @@ body {
     border: 2px dashed #667eea;
 }
 
-.room-code-header h4, .join-room-header h4 {
+.qr-header h4, .join-header h4, .manual-header h4, .scan-header h4 {
     color: #333;
     margin-bottom: 8px;
     font-size: 1.2rem;
 }
 
-.room-code-header p, .join-room-header p {
+.qr-header p, .join-header p, .manual-header p, .scan-header p {
     color: #666;
     margin-bottom: 20px;
     font-size: 0.9rem;
 }
 
-.room-code-display {
+.qr-code-container {
     background: white;
-    padding: 25px;
-    border-radius: 15px;
+    padding: 20px;
+    border-radius: 12px;
     margin: 20px 0;
+    display: inline-block;
     border: 2px solid #667eea;
 }
 
-.room-code-display span {
-    font-size: 3rem;
-    font-weight: 800;
-    color: #667eea;
-    letter-spacing: 8px;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+#qrCanvas {
+    border-radius: 8px;
 }
 
-.room-input-container {
+.manual-code {
     margin: 20px 0;
 }
 
-.room-input-container input {
-    width: 100%;
-    padding: 18px;
-    font-size: 1.5rem;
-    text-align: center;
-    border: 2px solid #ddd;
-    border-radius: 12px;
-    outline: none;
-    font-weight: 600;
-    letter-spacing: 4px;
+.manual-code p {
+    color: #666;
+    margin-bottom: 10px;
 }
 
-.room-input-container input:focus {
+.code-display {
+    background: white;
+    padding: 15px;
+    border-radius: 8px;
+    font-family: monospace;
+    word-break: break-all;
+    border: 1px solid #ddd;
+    font-size: 0.9rem;
+    max-height: 100px;
+    overflow-y: auto;
+}
+
+.qr-actions, .join-actions, .manual-actions, .scan-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.qr-actions .action-btn, .join-actions .action-btn, 
+.manual-actions .action-btn, .scan-actions .action-btn {
+    flex: 1;
+    min-width: 120px;
+}
+
+/* 加入选项 */
+.join-options {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin: 20px 0;
+}
+
+.join-option-btn {
+    background: white;
+    border: 2px solid #667eea;
+    padding: 20px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.join-option-btn:hover {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+}
+
+.option-icon {
+    font-size: 1.5rem;
+}
+
+.option-text {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+
+/* 手动输入 */
+.input-container {
+    margin: 20px 0;
+}
+
+#connectionInput {
+    width: 100%;
+    padding: 15px;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    font-size: 1rem;
+    resize: vertical;
+    min-height: 100px;
+    font-family: monospace;
+}
+
+#connectionInput:focus {
     border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    outline: none;
 }
 
 .input-hint {
     color: #666;
     font-size: 0.85rem;
     margin-top: 8px;
+    text-align: left;
 }
 
-.room-actions {
-    display: flex;
-    gap: 12px;
-    margin-top: 20px;
+/* 扫描面板 */
+.scanner-container {
+    position: relative;
+    width: 100%;
+    max-width: 300px;
+    margin: 20px auto;
+    border-radius: 12px;
+    overflow: hidden;
+    background: black;
+}
+
+#scannerVideo {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+}
+
+.scan-frame {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 200px;
+    height: 200px;
+    border: 3px solid #2ed573;
+    border-radius: 12px;
+    box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.3);
 }
 
 /* 连接日志 */
@@ -392,10 +482,26 @@ body {
     color: #dc3545;
 }
 
+/* 聊天界面 */
 .chat-container {
     display: flex;
     flex-direction: column;
-    height: 400px;
+    height: 500px;
+}
+
+.chat-header {
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+}
+
+.connection-info {
+    font-size: 0.8rem;
+    opacity: 0.9;
 }
 
 .messages {
@@ -507,19 +613,32 @@ input:focus {
     }
     
     .chat-container {
-        height: 350px;
+        height: 450px;
     }
     
-    .connection-actions, .room-actions {
+    .connection-actions, .qr-actions, .join-actions, 
+    .manual-actions, .scan-actions {
         flex-direction: column;
     }
     
-    .room-code-display span {
-        font-size: 2.5rem;
-        letter-spacing: 6px;
+    .action-btn {
+        min-width: auto;
     }
     
     .instructions-panel, .connection-panel {
         padding: 20px 15px;
+    }
+    
+    .scanner-container {
+        max-width: 250px;
+    }
+    
+    #scannerVideo {
+        height: 250px;
+    }
+    
+    .scan-frame {
+        width: 180px;
+        height: 180px;
     }
 }
