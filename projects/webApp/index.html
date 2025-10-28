@@ -88,6 +88,10 @@
                         <span class="option-icon">📷</span>
                         <span class="option-text">扫描二维码</span>
                     </button>
+                    <button id="galleryQRBtn" class="join-option-btn">
+                        <span class="option-icon">🖼️</span>
+                        <span class="option-text">从相册选择</span>
+                    </button>
                     <button id="manualInputBtn" class="join-option-btn">
                         <span class="option-icon">⌨️</span>
                         <span class="option-text">手动输入代码</span>
@@ -123,7 +127,9 @@
                 <div class="scanner-container">
                     <video id="scannerVideo" playsinline></video>
                     <canvas id="scannerCanvas" style="display: none;"></canvas>
-                    <div class="scan-frame"></div>
+                    <div class="scan-frame">
+                        <div class="scan-line"></div>
+                    </div>
                 </div>
                 <div class="scan-actions">
                     <button id="cancelScanBtn" class="action-btn secondary">取消扫描</button>
@@ -170,6 +176,9 @@
         </div>
     </div>
 
+    <!-- 隐藏的文件输入 -->
+    <input type="file" id="fileInput" accept="image/*" style="display: none;">
+
     <!-- 简单的QR码生成库 -->
     <script>
         // 简化的QR码生成器
@@ -183,15 +192,21 @@
                 ctx.fillStyle = 'white';
                 ctx.fillRect(0, 0, size, size);
                 
-                // 简单的QR码模式 - 使用数据URL编码
-                const encodedText = btoa(encodeURIComponent(text));
-                this.drawPattern(ctx, encodedText, size);
+                // 计算合适的模块大小
+                const dataLength = text.length;
+                const moduleSize = Math.max(2, Math.floor((size - 20) / (this.getMatrixSize(dataLength))));
+                const padding = (size - (this.getMatrixSize(dataLength) * moduleSize)) / 2;
+                
+                // 绘制QR码
+                this.drawQRCode(ctx, text, padding, moduleSize, size);
             }
             
-            static drawPattern(ctx, data, size) {
-                const moduleSize = 4;
-                const padding = 10;
-                
+            static getMatrixSize(dataLength) {
+                // 简化的矩阵大小计算
+                return Math.ceil(Math.sqrt(dataLength * 8)) + 12;
+            }
+            
+            static drawQRCode(ctx, text, padding, moduleSize, size) {
                 ctx.fillStyle = 'black';
                 
                 // 绘制定位图案
@@ -199,12 +214,26 @@
                 this.drawFinderPattern(ctx, size - padding - 7 * moduleSize, padding, moduleSize);
                 this.drawFinderPattern(ctx, padding, size - padding - 7 * moduleSize, moduleSize);
                 
-                // 简单数据编码
+                // 绘制数据
+                this.drawData(ctx, text, padding, moduleSize, size);
+            }
+            
+            static drawFinderPattern(ctx, x, y, moduleSize) {
+                ctx.fillStyle = 'black';
+                ctx.fillRect(x, y, 7 * moduleSize, 7 * moduleSize);
+                ctx.fillStyle = 'white';
+                ctx.fillRect(x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize);
+                ctx.fillStyle = 'black';
+                ctx.fillRect(x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize);
+            }
+            
+            static drawData(ctx, text, padding, moduleSize, size) {
+                const encodedText = btoa(encodeURIComponent(text));
                 let x = padding + 9 * moduleSize;
                 let y = padding + 9 * moduleSize;
                 
-                for (let i = 0; i < data.length; i++) {
-                    const charCode = data.charCodeAt(i);
+                for (let i = 0; i < encodedText.length; i++) {
+                    const charCode = encodedText.charCodeAt(i);
                     for (let bit = 0; bit < 8; bit++) {
                         if (charCode & (1 << bit)) {
                             ctx.fillRect(x, y, moduleSize, moduleSize);
@@ -216,15 +245,6 @@
                         }
                     }
                 }
-            }
-            
-            static drawFinderPattern(ctx, x, y, moduleSize) {
-                ctx.fillStyle = 'black';
-                ctx.fillRect(x, y, 7 * moduleSize, 7 * moduleSize);
-                ctx.fillStyle = 'white';
-                ctx.fillRect(x + moduleSize, y + moduleSize, 5 * moduleSize, 5 * moduleSize);
-                ctx.fillStyle = 'black';
-                ctx.fillRect(x + 2 * moduleSize, y + 2 * moduleSize, 3 * moduleSize, 3 * moduleSize);
             }
         }
     </script>

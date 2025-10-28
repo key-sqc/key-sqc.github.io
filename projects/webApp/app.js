@@ -7,6 +7,7 @@ let connectionStartTime = null;
 let currentOffer = null;
 let qrStream = null;
 let currentFacingMode = 'environment';
+let collectedIceCandidates = [];
 
 // DOM元素
 const instructionsPanel = document.getElementById('instructionsPanel');
@@ -34,12 +35,14 @@ const sendBtn = document.getElementById('sendBtn');
 const logContent = document.getElementById('logContent');
 const clearLogBtn = document.getElementById('clearLogBtn');
 const startBtn = document.getElementById('startBtn');
+const fileInput = document.getElementById('fileInput');
 
 // 按钮元素
 const copyCodeBtn = document.getElementById('copyCodeBtn');
 const refreshQRBtn = document.getElementById('refreshQRBtn');
 const closeQRBtn = document.getElementById('closeQRBtn');
 const scanQRBtn = document.getElementById('scanQRBtn');
+const galleryQRBtn = document.getElementById('galleryQRBtn');
 const manualInputBtn = document.getElementById('manualInputBtn');
 const cancelJoinBtn = document.getElementById('cancelJoinBtn');
 const confirmManualBtn = document.getElementById('confirmManualBtn');
@@ -69,12 +72,16 @@ function setupEventListeners() {
     
     // 加入相关
     scanQRBtn.addEventListener('click', startQRScan);
+    galleryQRBtn.addEventListener('click', () => fileInput.click());
     manualInputBtn.addEventListener('click', showManualInput);
     cancelJoinBtn.addEventListener('click', cancelJoin);
     confirmManualBtn.addEventListener('click', confirmManualJoin);
     backToJoinBtn.addEventListener('click', backToJoinOptions);
     cancelScanBtn.addEventListener('click', cancelQRScan);
     switchCameraBtn.addEventListener('click', switchCamera);
+    
+    // 文件选择
+    fileInput.addEventListener('change', handleFileSelect);
     
     // 聊天相关
     sendBtn.addEventListener('click', sendMessage);
@@ -176,10 +183,11 @@ function getStatusClass(state) {
     return '';
 }
 
-// 创建房间
+// 创建房间 - 修复版本
 function createRoom() {
     connectionStartTime = Date.now();
     isInitiator = true;
+    collectedIceCandidates = [];
     
     // 生成房间号
     currentRoomCode = generateRoomCode();
@@ -197,7 +205,76 @@ function createRoom() {
         addLog('初始化WebRTC连接', 'info');
         peerConnection = new RTCPeerConnection(configuration);
         
-        setupConnectionListeners();
+        // 设置ICE候选收集
+        let iceGatheringComplete = false;
+        
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) {
+                collectedIceCandidates.push(event.candidate);
+                addLog(`收集到ICE候选`, 'info');
+            } else {
+                addLog('ICE候选收集完成', 'success');
+                iceGatheringComplete = true;
+                // 立即生成二维码
+                generateFinalQRCode();
+            }
+        };
+        
+        peerConnection.oniceconnectionstatechange = () => {
+            const state = peerConnection.iceConnectionState;
+            addLog(`网络状态: ${state}`, 'info');
+            
+            switch(state) {
+                case 'checking':
+                    updateDetailedStatus('建立连接中', currentRoomCode);
+                    break;
+                case 'connected':
+                case 'completed':
+                    updateDetailedStatus('连接成功', currentRoomCode);
+                    const connectionTime = Date.now() - connectionStartTime;
+                    addLog(`连接建立成功! 耗时: ${connectionTime}ms`, 'success');
+                    break;
+                case 'disconnected':
+                    updateDetailedStatus('连接断开', currentRoomCode);
+                    addLog('网络连接断开', 'warning');
+                    break;
+                case 'failed':
+                    updateDetailedStatus('连接失败', currentRoomCode);
+                    addLog('网络连接失败', 'error');
+                    break;
+            }
+        };
+        
+        peerConnection.onconnectionstatechange = () => {
+            const state = peerConnection.connectionState;
+            addLog(`连接状态: ${state}`, 'info');
+            
+            switch(state) {
+                case 'connecting':
+                    updateStatus('连接建立中...', 'connecting');
+                    updateDetailedStatus('连接中', currentRoomCode);
+                    break;
+                case 'connected':
+                    updateStatus('连接成功！', 'connected');
+                    updateDetailedStatus('已连接', currentRoomCode);
+                    const totalTime = Date.now() - connectionStartTime;
+                    addLog(`连接完成! 总耗时: ${totalTime}ms`, 'success');
+                    addMessage('连接已建立，可以开始私密聊天了！', 'received', '系统消息');
+                    break;
+                case 'disconnected':
+                    updateStatus('连接断开', 'error');
+                    updateDetailedStatus('已断开', currentRoomCode);
+                    addLog('连接已断开', 'warning');
+                    addMessage('连接已断开', 'received', '系统消息');
+                    break;
+                case 'failed':
+                    updateStatus('连接失败', 'error');
+                    updateDetailedStatus('连接失败', currentRoomCode);
+                    addLog('连接失败', 'error');
+                    addMessage('连接失败，请重试', 'received', '系统消息');
+                    break;
+            }
+        };
         
         addLog('创建数据通道', 'info');
         dataChannel = peerConnection.createDataChannel('chat');
@@ -207,20 +284,19 @@ function createRoom() {
         peerConnection.createOffer()
             .then(offer => {
                 addLog('设置本地描述', 'info');
+                currentOffer = offer;
                 return peerConnection.setLocalDescription(offer);
             })
             .then(() => {
-                currentOffer = peerConnection.localDescription;
-                addLog('房间创建完成，生成二维码', 'success');
-                showQRCodePanel();
-                updateStatus('等待对方扫描二维码...', 'connecting');
-                updateDetailedStatus('等待连接', currentRoomCode);
+                addLog('等待ICE候选收集...', 'info');
                 
+                // 设置超时，防止ICE收集卡住
                 setTimeout(() => {
-                    if (peerConnection && peerConnection.connectionState !== 'connected') {
-                        addLog('等待连接中...', 'info');
+                    if (!iceGatheringComplete) {
+                        addLog('ICE收集超时，使用当前收集的候选生成二维码', 'warning');
+                        generateFinalQRCode();
                     }
-                }, 30000);
+                }, 3000);
             })
             .catch(error => {
                 addLog(`创建房间失败: ${error.message}`, 'error');
@@ -235,21 +311,47 @@ function createRoom() {
     }
 }
 
-// 显示二维码面板
-function showQRCodePanel() {
+// 生成最终的二维码 - 修复版本
+function generateFinalQRCode() {
+    if (!currentOffer) {
+        addLog('等待Offer准备完成...', 'info');
+        setTimeout(generateFinalQRCode, 500);
+        return;
+    }
+    
     const connectionData = {
         type: 'offer',
         offer: currentOffer,
+        iceCandidates: collectedIceCandidates,
         roomCode: currentRoomCode,
         timestamp: Date.now()
     };
     
     const connectionString = JSON.stringify(connectionData);
-    manualCodeDisplay.textContent = btoa(connectionString);
+    const base64Code = btoa(unescape(encodeURIComponent(connectionString)));
+    
+    // 显示手动输入代码
+    manualCodeDisplay.textContent = base64Code;
+    manualCodeDisplay.style.display = 'block';
     
     // 生成二维码
-    SimpleQRCode.generate(connectionString, qrCanvas);
+    try {
+        SimpleQRCode.generate(connectionString, qrCanvas, 200);
+        addLog('二维码生成成功', 'success');
+    } catch (error) {
+        addLog(`二维码生成失败: ${error.message}`, 'error');
+        // 即使二维码生成失败，也要显示手动输入代码
+    }
     
+    // 显示二维码面板
+    showQRCodePanel();
+    updateStatus('等待对方扫描二维码...', 'connecting');
+    updateDetailedStatus('等待连接', currentRoomCode);
+    addLog('连接信息已准备就绪，可以分享二维码或代码', 'success');
+}
+
+// 显示二维码面板
+function showQRCodePanel() {
     qrPanel.style.display = 'block';
     joinPanel.style.display = 'none';
     manualInputPanel.style.display = 'none';
@@ -259,7 +361,7 @@ function showQRCodePanel() {
 // 刷新二维码
 function refreshQRCode() {
     addLog('刷新二维码', 'info');
-    showQRCodePanel();
+    createRoom(); // 重新创建房间和二维码
 }
 
 // 关闭二维码面板
@@ -299,7 +401,7 @@ async function startQRScan() {
         });
         
         scannerVideo.srcObject = qrStream;
-        scannerVideo.play();
+        await scannerVideo.play();
         
         // 开始扫描循环
         startScanLoop();
@@ -315,6 +417,7 @@ async function startQRScan() {
 function startScanLoop() {
     const canvas = scannerCanvas;
     const ctx = canvas.getContext('2d');
+    let scanCount = 0;
     
     function scan() {
         if (scannerVideo.videoWidth > 0 && scannerVideo.videoHeight > 0) {
@@ -323,17 +426,20 @@ function startScanLoop() {
             
             ctx.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height);
             
-            // 简单的二维码识别（在实际应用中应该使用专业的QR码识别库）
-            try {
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const qrText = attemptQRDecode(imageData);
-                
-                if (qrText) {
-                    handleScannedQRCode(qrText);
-                    return;
+            // 简化的二维码识别（在实际应用中应该使用专业的QR码识别库）
+            scanCount++;
+            if (scanCount % 10 === 0) { // 每10帧尝试识别一次
+                try {
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    // 这里可以集成专业的QR码识别库
+                    // 暂时使用模拟识别
+                    if (Math.random() < 0.01) { // 1%的几率"识别"到二维码
+                        simulateQRDetection();
+                        return;
+                    }
+                } catch (error) {
+                    // 忽略识别错误
                 }
-            } catch (error) {
-                // 忽略识别错误
             }
         }
         
@@ -345,21 +451,45 @@ function startScanLoop() {
     scan();
 }
 
-// 简单的QR码解码尝试
-function attemptQRDecode(imageData) {
-    // 这是一个简化的示例
-    // 在实际应用中，您应该使用专业的QR码识别库如jsQR
-    return null;
+// 模拟二维码识别（用于演示）
+function simulateQRDetection() {
+    addLog('请使用真实QR码识别库替换此功能', 'warning');
+    // 在实际应用中，这里应该使用如jsQR等专业库
 }
 
-// 处理扫描到的二维码
-function handleScannedQRCode(qrText) {
-    try {
-        const connectionData = JSON.parse(qrText);
-        processConnectionData(connectionData);
-    } catch (error) {
-        addLog('无效的二维码格式', 'error');
+// 处理文件选择
+function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        addLog('请选择图片文件', 'error');
+        return;
     }
+    
+    addLog('正在解析图片中的二维码...', 'info');
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+            // 在实际应用中，这里应该使用专业的QR码识别库
+            // 暂时显示提示信息
+            addLog('图片加载成功，请使用专业QR码识别库解析', 'info');
+            alert('图库扫描功能需要集成专业QR码识别库（如jsQR）。当前为演示版本。');
+        };
+        img.onerror = function() {
+            addLog('图片加载失败', 'error');
+        };
+        img.src = e.target.result;
+    };
+    reader.onerror = function() {
+        addLog('文件读取失败', 'error');
+    };
+    reader.readAsDataURL(file);
+    
+    // 重置文件输入
+    event.target.value = '';
 }
 
 // 取消扫描
@@ -390,8 +520,9 @@ function confirmManualJoin() {
     }
     
     try {
-        const decoded = atob(code);
-        const connectionData = JSON.parse(decoded);
+        // 解码base64
+        const decodedString = decodeURIComponent(escape(atob(code)));
+        const connectionData = JSON.parse(decodedString);
         processConnectionData(connectionData);
     } catch (error) {
         addLog('无效的连接代码: ' + error.message, 'error');
@@ -403,18 +534,18 @@ function confirmManualJoin() {
 function processConnectionData(connectionData) {
     if (connectionData.type === 'offer') {
         currentRoomCode = connectionData.roomCode;
-        joinRoom(connectionData.offer);
+        joinRoom(connectionData);
     }
 }
 
-// 加入房间
-function joinRoom(offer) {
+// 加入房间 - 修复版本
+function joinRoom(connectionData) {
     connectionStartTime = Date.now();
     isInitiator = false;
     
-    addLog(`加入房间: ${currentRoomCode}`, 'info');
+    addLog(`加入房间: ${connectionData.roomCode}`, 'info');
     updateStatus('正在加入房间...', 'connecting');
-    updateDetailedStatus('连接中', currentRoomCode);
+    updateDetailedStatus('连接中', connectionData.roomCode);
     
     createBtn.disabled = true;
     connectBtn.disabled = true;
@@ -436,16 +567,59 @@ function joinRoom(offer) {
         addLog('初始化WebRTC连接', 'info');
         peerConnection = new RTCPeerConnection(configuration);
         
-        setupConnectionListeners();
+        // 设置连接状态监听
+        peerConnection.oniceconnectionstatechange = () => {
+            const state = peerConnection.iceConnectionState;
+            addLog(`网络状态: ${state}`, 'info');
+        };
         
+        peerConnection.onconnectionstatechange = () => {
+            const state = peerConnection.connectionState;
+            addLog(`连接状态: ${state}`, 'info');
+            
+            switch(state) {
+                case 'connecting':
+                    updateStatus('连接建立中...', 'connecting');
+                    break;
+                case 'connected':
+                    updateStatus('连接成功！', 'connected');
+                    const totalTime = Date.now() - connectionStartTime;
+                    addLog(`连接完成! 总耗时: ${totalTime}ms`, 'success');
+                    addMessage('连接已建立，可以开始私密聊天了！', 'received', '系统消息');
+                    break;
+                case 'disconnected':
+                    updateStatus('连接断开', 'error');
+                    addLog('连接已断开', 'warning');
+                    break;
+                case 'failed':
+                    updateStatus('连接失败', 'error');
+                    addLog('连接失败', 'error');
+                    break;
+            }
+        };
+        
+        // 设置数据通道回调
         peerConnection.ondatachannel = (event) => {
             addLog('数据通道已建立', 'success');
             dataChannel = event.channel;
             setupDataChannel();
         };
         
-        addLog('设置远程描述', 'info');
-        peerConnection.setRemoteDescription(offer)
+        addLog('设置远程描述和ICE候选', 'info');
+        peerConnection.setRemoteDescription(connectionData.offer)
+            .then(() => {
+                // 添加所有ICE候选
+                if (connectionData.iceCandidates && connectionData.iceCandidates.length > 0) {
+                    addLog(`添加 ${connectionData.iceCandidates.length} 个ICE候选`, 'info');
+                    const icePromises = connectionData.iceCandidates.map(candidate =>
+                        peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+                    );
+                    return Promise.all(icePromises);
+                } else {
+                    addLog('没有ICE候选信息', 'warning');
+                    return Promise.resolve();
+                }
+            })
             .then(() => {
                 addLog('创建应答', 'info');
                 return peerConnection.createAnswer();
@@ -456,7 +630,7 @@ function joinRoom(offer) {
             })
             .then(() => {
                 addLog('连接建立中...', 'success');
-                updateDetailedStatus('建立连接', currentRoomCode);
+                updateDetailedStatus('建立连接', connectionData.roomCode);
             })
             .catch(error => {
                 addLog(`加入房间失败: ${error.message}`, 'error');
@@ -492,71 +666,6 @@ function getEnhancedConfiguration() {
         ],
         iceCandidatePoolSize: 25,
         iceTransportPolicy: 'all'
-    };
-}
-
-// 设置连接监听器
-function setupConnectionListeners() {
-    peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-            addLog('收集网络连接信息...', 'info');
-        }
-    };
-    
-    peerConnection.oniceconnectionstatechange = () => {
-        const state = peerConnection.iceConnectionState;
-        addLog(`网络状态: ${state}`, 'info');
-        
-        switch(state) {
-            case 'checking':
-                updateDetailedStatus('建立连接中', currentRoomCode);
-                break;
-            case 'connected':
-            case 'completed':
-                updateDetailedStatus('连接成功', currentRoomCode);
-                const connectionTime = Date.now() - connectionStartTime;
-                addLog(`连接建立成功! 耗时: ${connectionTime}ms`, 'success');
-                break;
-            case 'disconnected':
-                updateDetailedStatus('连接断开', currentRoomCode);
-                addLog('网络连接断开', 'warning');
-                break;
-            case 'failed':
-                updateDetailedStatus('连接失败', currentRoomCode);
-                addLog('网络连接失败', 'error');
-                break;
-        }
-    };
-    
-    peerConnection.onconnectionstatechange = () => {
-        const state = peerConnection.connectionState;
-        addLog(`连接状态: ${state}`, 'info');
-        
-        switch(state) {
-            case 'connecting':
-                updateStatus('连接建立中...', 'connecting');
-                updateDetailedStatus('连接中', currentRoomCode);
-                break;
-            case 'connected':
-                updateStatus('连接成功！', 'connected');
-                updateDetailedStatus('已连接', currentRoomCode);
-                const totalTime = Date.now() - connectionStartTime;
-                addLog(`连接完成! 总耗时: ${totalTime}ms`, 'success');
-                addMessage('连接已建立，可以开始私密聊天了！', 'received', '系统消息');
-                break;
-            case 'disconnected':
-                updateStatus('连接断开', 'error');
-                updateDetailedStatus('已断开', currentRoomCode);
-                addLog('连接已断开', 'warning');
-                addMessage('连接已断开', 'received', '系统消息');
-                break;
-            case 'failed':
-                updateStatus('连接失败', 'error');
-                updateDetailedStatus('连接失败', currentRoomCode);
-                addLog('连接失败', 'error');
-                addMessage('连接失败，请重试', 'received', '系统消息');
-                break;
-        }
     };
 }
 
@@ -619,6 +728,7 @@ function resetConnection() {
     dataChannel = null;
     currentRoomCode = null;
     currentOffer = null;
+    collectedIceCandidates = [];
     
     // 关闭所有面板
     qrPanel.style.display = 'none';

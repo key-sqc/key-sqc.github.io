@@ -276,15 +276,20 @@ body {
 
 .qr-code-container {
     background: white;
-    padding: 20px;
+    padding: 25px;
     border-radius: 12px;
-    margin: 20px 0;
-    display: inline-block;
+    margin: 20px auto;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     border: 2px solid #667eea;
+    max-width: 280px;
 }
 
 #qrCanvas {
     border-radius: 8px;
+    display: block;
+    margin: 0 auto;
 }
 
 .manual-code {
@@ -306,6 +311,7 @@ body {
     font-size: 0.9rem;
     max-height: 100px;
     overflow-y: auto;
+    text-align: left;
 }
 
 .qr-actions, .join-actions, .manual-actions, .scan-actions {
@@ -313,12 +319,14 @@ body {
     gap: 10px;
     margin-top: 20px;
     flex-wrap: wrap;
+    justify-content: center;
 }
 
 .qr-actions .action-btn, .join-actions .action-btn, 
 .manual-actions .action-btn, .scan-actions .action-btn {
     flex: 1;
     min-width: 120px;
+    max-width: 150px;
 }
 
 /* 加入选项 */
@@ -411,6 +419,28 @@ body {
     border: 3px solid #2ed573;
     border-radius: 12px;
     box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.3);
+}
+
+.scan-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: #2ed573;
+    animation: scan 2s linear infinite;
+}
+
+@keyframes scan {
+    0% {
+        top: 0;
+    }
+    50% {
+        top: calc(100% - 3px);
+    }
+    100% {
+        top: 0;
+    }
 }
 
 /* 连接日志 */
@@ -623,6 +653,7 @@ input:focus {
     
     .action-btn {
         min-width: auto;
+        max-width: none;
     }
     
     .instructions-panel, .connection-panel {
@@ -640,5 +671,10 @@ input:focus {
     .scan-frame {
         width: 180px;
         height: 180px;
+    }
+    
+    .qr-code-container {
+        padding: 20px;
+        max-width: 250px;
     }
 }
