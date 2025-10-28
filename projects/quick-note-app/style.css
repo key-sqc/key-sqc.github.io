@@ -336,66 +336,59 @@ body {
   font-size: 12px;
 }
 
-/* 滑动操作提示 */
+/* 滑动操作提示 - 完全重新设计 */
 .action-hints {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
   opacity: 0;
   transition: opacity var(--transition-fast);
   pointer-events: none;
-}
-
-.pin-hint {
-  right: 20px;
-  background: var(--warning-gradient);
-  color: white;
-  padding: 8px 14px;
-  border-radius: 12px;
-  font-size: 13px;
+  z-index: 5;
   font-weight: 600;
-  box-shadow: var(--shadow-medium);
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  font-size: 14px;
+  color: white;
+  width: 80px;
 }
 
+/* 删除提示 - 在右侧 */
 .delete-hint {
-  left: 20px;
+  right: -80px;
   background: var(--danger-gradient);
-  color: white;
-  padding: 8px 14px;
-  border-radius: 12px;
-  font-size: 13px;
-  font-weight: 600;
-  box-shadow: var(--shadow-medium);
-  backdrop-filter: blur(10px);
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+}
+
+/* 置顶提示 - 在左侧 */
+.pin-hint {
+  left: -80px;
+  background: var(--warning-gradient);
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
 }
 
 /* 滑动状态 */
 .history-item.swiping-left .delete-hint {
   opacity: 1;
+  right: 0;
 }
 
 .history-item.swiping-right .pin-hint {
   opacity: 1;
+  left: 0;
 }
 
 .history-item.swiping-left {
   background: linear-gradient(135deg, #ffeef0 0%, #fff0f0 100%);
   transition: none;
+  transform: translate3d(-80px, 0, 0);
 }
 
 .history-item.swiping-right {
   background: linear-gradient(135deg, #fff3e0 0%, #ffecb3 100%);
   transition: none;
+  transform: translate3d(80px, 0, 0);
 }
 
 /* 滑动删除和置顶动画 */
