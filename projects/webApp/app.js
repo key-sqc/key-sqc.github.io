@@ -1,4 +1,4 @@
-// app.js - 修复二维码显示问题
+// app.js - 完全修复 localStorage 信令
 class DecentralizedMessenger {
     constructor() {
         this.peerConnection = null;
@@ -13,7 +13,7 @@ class DecentralizedMessenger {
         
         this.initializeApp();
         this.setupEventListeners();
-        this.generateQRCode(); // 确保调用生成二维码
+        this.generateQRCode();
         this.setupSignaling();
     }
     
@@ -24,12 +24,16 @@ class DecentralizedMessenger {
     
     // 设置基于 localStorage 的信令系统
     setupSignaling() {
+        console.log('初始化信令系统，本地ID:', this.localId);
+        
         // 监听 localStorage 变化来接收信令
         window.addEventListener('storage', (e) => {
             if (e.key === 'webrtc-signaling' && e.newValue) {
                 try {
                     const signal = JSON.parse(e.newValue);
-                    // 只处理发给自己的信令
+                    console.log('收到信令:', signal);
+                    
+                    // 只处理发给自己的信令或广播信令
                     if (signal.to === this.localId || signal.to === 'broadcast') {
                         this.log(`收到来自 ${signal.from} 的信令: ${signal.type}`, 'info');
                         this.handleSignaling(signal.from, signal.data);
@@ -39,9 +43,30 @@ class DecentralizedMessenger {
                 }
             }
         });
+
+        // 定期清理旧信令
+        setInterval(() => {
+            this.cleanupOldSignals();
+        }, 10000);
     }
     
-    // 发送信令
+    // 清理旧信令
+    cleanupOldSignals() {
+        const signal = localStorage.getItem('webrtc-signaling');
+        if (signal) {
+            try {
+                const signalData = JSON.parse(signal);
+                // 如果信令超过30秒，清理它
+                if (Date.now() - signalData.timestamp > 30000) {
+                    localStorage.removeItem('webrtc-signaling');
+                }
+            } catch (error) {
+                localStorage.removeItem('webrtc-signaling');
+            }
+        }
+    }
+    
+    // 发送信令 - 完全使用 localStorage
     sendSignal(to, data) {
         const signal = {
             from: this.localId,
@@ -52,9 +77,33 @@ class DecentralizedMessenger {
         };
         
         this.log(`发送信令到 ${to}: ${data.type}`, 'info');
+        console.log('发送信令:', signal);
         
         // 使用 localStorage 作为信令通道
         localStorage.setItem('webrtc-signaling', JSON.stringify(signal));
+        
+        // 立即触发 storage 事件
+        this.triggerStorageEvent();
+    }
+
+    // 手动触发 storage 事件
+    triggerStorageEvent() {
+        try {
+            const signal = localStorage.getItem('webrtc-signaling');
+            if (signal) {
+                // 创建并分发 storage 事件
+                const event = new StorageEvent('storage', {
+                    key: 'webrtc-signaling',
+                    newValue: signal,
+                    oldValue: null,
+                    url: window.location.href,
+                    storageArea: localStorage
+                });
+                window.dispatchEvent(event);
+            }
+        } catch (error) {
+            console.error('触发 storage 事件失败:', error);
+        }
     }
     
     // 初始化应用
@@ -64,7 +113,9 @@ class DecentralizedMessenger {
         this.updateInputStatus('等待连接...', false);
         
         // 清理之前的信令数据
-        localStorage.removeItem('webrtc-signaling');
+        setTimeout(() => {
+            localStorage.removeItem('webrtc-signaling');
+        }, 1000);
     }
     
     // 设置事件监听
@@ -108,7 +159,7 @@ class DecentralizedMessenger {
         });
     }
     
-    // 生成二维码 - 修复这个方法
+    // 生成二维码
     generateQRCode() {
         try {
             const qrData = JSON.stringify({
@@ -118,18 +169,15 @@ class DecentralizedMessenger {
                 timestamp: Date.now()
             });
             
-            // 使用 qrcode-generator 库
-            const typeNumber = 0; // 自动类型
-            const errorCorrectionLevel = 'L';
-            const qr = qrcode(typeNumber, errorCorrectionLevel);
+            const qr = qrcode(0, 'M');
             qr.addData(qrData);
             qr.make();
             
             const qrContainer = document.getElementById('qrcode');
             if (qrContainer) {
-                qrContainer.innerHTML = qr.createImgTag(4, 0); // 大小4px，边距0
+                qrContainer.innerHTML = qr.createImgTag(4);
                 
-                // 添加样式让二维码居中
+                // 添加样式
                 const qrImage = qrContainer.querySelector('img');
                 if (qrImage) {
                     qrImage.style.display = 'block';
@@ -137,12 +185,9 @@ class DecentralizedMessenger {
                     qrImage.style.border = '1px solid #ddd';
                     qrImage.style.borderRadius = '8px';
                 }
-            } else {
-                console.error('找不到二维码容器元素');
             }
         } catch (error) {
             console.error('生成二维码失败:', error);
-            // 降级方案：显示文本ID
             const qrContainer = document.getElementById('qrcode');
             if (qrContainer) {
                 qrContainer.innerHTML = `
@@ -165,17 +210,17 @@ class DecentralizedMessenger {
             this.peerConnection = new RTCPeerConnection({
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' }
+                    { urls: 'stun:stun1.l.google.com:19302' }
                 ]
             });
             
             // 设置数据通道
             this.setupDataChannel();
             
-            // 监听ICE候选
+            // 监听ICE候选 - 修复这里，使用 localStorage 发送
             this.peerConnection.onicecandidate = (event) => {
                 if (event.candidate) {
+                    console.log('生成ICE候选:', event.candidate);
                     this.sendSignal(this.remoteId, {
                         type: 'ice-candidate',
                         candidate: event.candidate
@@ -191,12 +236,7 @@ class DecentralizedMessenger {
                 if (state === 'connected') {
                     this.handleConnectionSuccess();
                 } else if (state === 'failed' || state === 'disconnected') {
-                    this.log('连接失败，尝试重新连接...', 'warning');
-                    setTimeout(() => {
-                        if (!this.isConnected) {
-                            this.initiateConnection();
-                        }
-                    }, 2000);
+                    this.log('连接失败', 'warning');
                 }
             };
             
@@ -221,28 +261,28 @@ class DecentralizedMessenger {
     setupDataChannel() {
         // 创建数据通道
         this.dataChannel = this.peerConnection.createDataChannel('chat', {
-            ordered: true,
-            maxRetransmits: 3
+            ordered: true
         });
         
         this.setupDataChannelEvents(this.dataChannel);
         
         // 监听对方创建的数据通道
         this.peerConnection.ondatachannel = (event) => {
+            console.log('收到数据通道:', event.channel);
             this.dataChannel = event.channel;
             this.setupDataChannelEvents(this.dataChannel);
-            this.log('已接受对方的数据通道', 'success');
         };
     }
     
     // 设置数据通道事件
     setupDataChannelEvents(channel) {
         channel.onopen = () => {
+            console.log('数据通道已打开');
             this.handleConnectionSuccess();
         };
         
         channel.onclose = () => {
-            this.log('连接已关闭', 'warning');
+            console.log('数据通道已关闭');
             this.isConnected = false;
             this.updateStatus('离线', false);
             this.showTemporaryMessage('连接已断开');
@@ -251,13 +291,14 @@ class DecentralizedMessenger {
         };
         
         channel.onmessage = (event) => {
+            console.log('收到消息:', event.data);
             this.messageCount++;
             this.displayMessage(event.data, 'received');
             this.updateStats();
         };
         
         channel.onerror = (error) => {
-            this.log('数据通道错误: ' + error, 'error');
+            console.error('数据通道错误:', error);
         };
     }
     
@@ -270,8 +311,8 @@ class DecentralizedMessenger {
         this.switchToChatPanel();
         this.showConnectionSuccess();
         this.updateInputStatus('可以发送消息了!', true);
-        this.playConnectionSound();
         this.startQualityMonitoring();
+        this.updateStats();
         
         // 隐藏欢迎消息
         const welcomeMessage = document.getElementById('welcome-message');
@@ -282,6 +323,8 @@ class DecentralizedMessenger {
     
     // 处理信令消息
     async handleSignaling(from, signal) {
+        console.log('处理信令:', from, signal);
+        
         // 如果是连接请求，设置远程ID
         if (signal.type === 'offer' && !this.remoteId) {
             this.remoteId = from;
@@ -293,8 +336,7 @@ class DecentralizedMessenger {
             this.peerConnection = new RTCPeerConnection({
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' },
-                    { urls: 'stun:stun2.l.google.com:19302' }
+                    { urls: 'stun:stun1.l.google.com:19302' }
                 ]
             });
             
@@ -310,8 +352,9 @@ class DecentralizedMessenger {
             };
             
             this.peerConnection.onconnectionstatechange = () => {
-                this.log(`连接状态: ${this.peerConnection.connectionState}`, 'info');
-                if (this.peerConnection.connectionState === 'connected') {
+                const state = this.peerConnection.connectionState;
+                this.log(`连接状态: ${state}`, 'info');
+                if (state === 'connected') {
                     this.handleConnectionSuccess();
                 }
             };
@@ -337,12 +380,15 @@ class DecentralizedMessenger {
                     break;
                     
                 case 'ice-candidate':
-                    await this.peerConnection.addIceCandidate(signal.candidate);
-                    this.log('已添加ICE候选', 'info');
+                    if (signal.candidate) {
+                        await this.peerConnection.addIceCandidate(signal.candidate);
+                        this.log('已添加ICE候选', 'info');
+                    }
                     break;
             }
         } catch (error) {
             this.log('处理信令失败: ' + error.message, 'error');
+            console.error('信令处理错误:', error);
         }
     }
     
@@ -377,13 +423,11 @@ class DecentralizedMessenger {
         const messageElement = document.createElement('div');
         messageElement.className = `message ${type}`;
         
-        // 添加消息内容
         const textElement = document.createElement('div');
         textElement.className = 'message-text';
         textElement.textContent = text;
         messageElement.appendChild(textElement);
         
-        // 添加时间戳
         const timestamp = new Date().toLocaleTimeString();
         const timeElement = document.createElement('span');
         timeElement.className = 'message-time';
@@ -399,35 +443,9 @@ class DecentralizedMessenger {
         const banner = document.getElementById('connection-success');
         if (banner) {
             banner.classList.add('show');
-            
-            // 5秒后自动隐藏
             setTimeout(() => {
                 banner.classList.remove('show');
             }, 5000);
-        }
-    }
-    
-    // 播放连接成功音效
-    playConnectionSound() {
-        try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.frequency.setValueAtTime(523.25, audioContext.currentTime);
-            oscillator.frequency.setValueAtTime(659.25, audioContext.currentTime + 0.1);
-            oscillator.frequency.setValueAtTime(783.99, audioContext.currentTime + 0.2);
-            
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-            
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.5);
-        } catch (error) {
-            console.log('音频播放失败:', error);
         }
     }
     
@@ -450,26 +468,18 @@ class DecentralizedMessenger {
     updateConnectionQuality() {
         if (!this.isConnected) {
             this.connectionQuality = 'unknown';
-            const qualityElement = document.getElementById('connection-quality');
-            if (qualityElement) {
-                qualityElement.className = 'quality-indicator';
-            }
             return;
         }
         
-        // 简单的连接质量评估
-        let qualityClass = 'quality-poor';
-        
-        if (this.messageCount > 20) {
-            qualityClass = 'quality-good';
-        } else if (this.messageCount > 10) {
-            qualityClass = 'quality-medium';
-        }
-        
-        this.connectionQuality = qualityClass;
         const qualityElement = document.getElementById('connection-quality');
         if (qualityElement) {
-            qualityElement.className = `quality-indicator ${qualityClass}`;
+            if (this.messageCount > 20) {
+                qualityElement.className = 'quality-indicator quality-good';
+            } else if (this.messageCount > 10) {
+                qualityElement.className = 'quality-indicator quality-medium';
+            } else {
+                qualityElement.className = 'quality-indicator quality-poor';
+            }
         }
     }
     
@@ -493,7 +503,6 @@ class DecentralizedMessenger {
         document.getElementById('chat-panel').classList.remove('hidden');
         document.getElementById('remote-peer-id').textContent = this.remoteId;
         
-        // 启用输入框
         const messageInput = document.getElementById('message-input');
         messageInput.disabled = false;
         messageInput.focus();
@@ -522,16 +531,9 @@ class DecentralizedMessenger {
         this.stopQualityMonitoring();
         this.updateStats();
         
-        // 显示欢迎消息
         const welcomeMessage = document.getElementById('welcome-message');
         if (welcomeMessage) {
             welcomeMessage.style.display = 'block';
-        }
-        
-        document.getElementById('remote-id').value = '';
-        const successBanner = document.getElementById('connection-success');
-        if (successBanner) {
-            successBanner.classList.remove('show');
         }
         
         this.log('连接已重置', 'info');
@@ -542,12 +544,7 @@ class DecentralizedMessenger {
         const statusElement = document.getElementById('status');
         if (statusElement) {
             statusElement.textContent = text;
-            
-            if (isConnected) {
-                statusElement.className = 'status-connected';
-            } else {
-                statusElement.className = 'status-offline';
-            }
+            statusElement.className = isConnected ? 'status-connected' : 'status-offline';
         }
     }
     
@@ -556,12 +553,7 @@ class DecentralizedMessenger {
         const inputStatus = document.getElementById('input-status');
         if (inputStatus) {
             inputStatus.textContent = text;
-            
-            if (isReady) {
-                inputStatus.style.color = '#2ecc71';
-            } else {
-                inputStatus.style.color = '#e74c3c';
-            }
+            inputStatus.style.color = isReady ? '#2ecc71' : '#e74c3c';
         }
     }
     
@@ -575,8 +567,6 @@ class DecentralizedMessenger {
         navigator.clipboard.writeText(text).then(() => {
             this.showTemporaryMessage('ID已复制到剪贴板');
         }).catch(err => {
-            console.error('复制失败: ', err);
-            // 降级方案
             const textArea = document.createElement('textarea');
             textArea.value = text;
             document.body.appendChild(textArea);
@@ -589,7 +579,6 @@ class DecentralizedMessenger {
     
     // 显示临时消息
     showTemporaryMessage(text) {
-        // 创建临时消息元素
         const messageElement = document.createElement('div');
         messageElement.textContent = text;
         messageElement.style.cssText = `
@@ -604,12 +593,9 @@ class DecentralizedMessenger {
             z-index: 1000;
             font-size: 0.9rem;
             box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-            animation: fadeInOut 3s ease-in-out;
         `;
         
         document.body.appendChild(messageElement);
-        
-        // 3秒后移除
         setTimeout(() => {
             if (document.body.contains(messageElement)) {
                 document.body.removeChild(messageElement);
