@@ -3,16 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>去中心化聊天</title>
+    <title>Decentralized Messenger</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="app-container">
         <header class="app-header">
-            <h1>🔗 去中心化聊天</h1>
+            <h1>Decentralized Messenger</h1>
             <div class="connection-status">
-                <div class="status-indicator" id="status-indicator"></div>
-                <span id="status-text">离线</span>
+                <span id="status">离线</span>
             </div>
         </header>
 
@@ -22,75 +21,47 @@
                 <h2>建立连接</h2>
                 <div class="input-group">
                     <label for="peer-id">你的ID:</label>
-                    <div class="input-with-button">
-                        <input type="text" id="peer-id" readonly>
-                        <button id="copy-id">复制</button>
-                    </div>
+                    <input type="text" id="peer-id" readonly>
+                    <button id="copy-id">复制ID</button>
                 </div>
                 <div class="input-group">
                     <label for="remote-id">对方ID:</label>
-                    <div class="input-with-button">
-                        <input type="text" id="remote-id" placeholder="输入对方ID">
-                        <button id="connect-btn">连接</button>
-                    </div>
+                    <input type="text" id="remote-id" placeholder="输入对方ID">
+                    <button id="connect-btn">连接</button>
                 </div>
-                
                 <div class="qr-section">
-                    <h3>📱 扫描二维码连接</h3>
+                    <h3>或扫描二维码连接</h3>
                     <div id="qrcode"></div>
                 </div>
-                
                 <div class="signaling-status">
-                    <h3>🔧 连接状态</h3>
+                    <h3>连接状态</h3>
                     <div id="signaling-log"></div>
+                    <div class="manual-controls">
+                        <button id="manual-connect">手动完成连接</button>
+                        <button id="check-status">检查状态</button>
+                    </div>
                 </div>
             </div>
 
             <!-- 聊天面板 -->
             <div id="chat-panel" class="panel">
                 <div class="chat-header">
-                    <div class="chat-info">
-                        <h2>与 <span id="peer-name">未知用户</span> 聊天</h2>
-                        <div class="connection-quality">
-                            <span id="connection-quality">连接质量: 未知</span>
-                        </div>
-                    </div>
-                    <button id="disconnect-btn" class="disconnect-btn">断开连接</button>
+                    <h2 id="chat-with">与 <span id="peer-name">未知用户</span> 聊天</h2>
+                    <button id="disconnect-btn">断开连接</button>
                 </div>
-                
-                <div class="connection-success-banner" id="connection-success">
-                    <div class="success-content">
-                        <span class="success-icon">✅</span>
-                        <span>连接成功！现在可以开始聊天了</span>
-                    </div>
-                </div>
-                
                 <div class="messages-container" id="messages">
-                    <div class="system-message" id="welcome-message">
-                        <p>💬 连接成功后，你可以在这里发送消息</p>
-                    </div>
+                    <!-- 消息将在这里显示 -->
                 </div>
-                
-                <div class="message-input-container">
-                    <div class="message-input">
-                        <input type="text" id="message-input" placeholder="输入消息..." disabled>
-                        <button id="send-btn" disabled>发送</button>
-                    </div>
-                    <div class="input-status" id="input-status">
-                        等待连接...
-                    </div>
+                <div class="message-input">
+                    <input type="text" id="message-input" placeholder="输入消息...">
+                    <button id="send-btn">发送</button>
                 </div>
             </div>
         </div>
 
         <footer class="app-footer">
-            <p>🔒 完全去中心化 · 端到端加密 · 无服务器</p>
+            <p>完全去中心化 · 端到端加密 · 无服务器</p>
         </footer>
-        
-        <!-- 连接成功音效 -->
-        <audio id="connection-sound" preload="auto">
-            <source src="data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==" type="audio/wav">
-        </audio>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
