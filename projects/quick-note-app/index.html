@@ -3,80 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>便签</title>
+    <title>灵感笔记 - 优雅的便签应用</title>
+    <meta name="description" content="一款精致、优雅的便签应用，让记录灵感成为一种享受">
     <link rel="stylesheet" href="style.css">
-    <style>
-        /* 加载动画 */
-        #loading {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #ffffff;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 9999;
-            transition: opacity 0.3s ease;
-        }
-        
-        .loader {
-            width: 40px;
-            height: 40px;
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #007bff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .app-content {
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-        
-        .app-content.loaded {
-            opacity: 1;
-        }
-    </style>
 </head>
 <body>
-    <!-- 加载动画 -->
-    <div id="loading">
-        <div class="loader"></div>
+    <!-- 加载骨架屏 -->
+    <div id="skeleton" class="skeleton">
+        <div class="skeleton-header"></div>
+        <div class="skeleton-content">
+            <div class="skeleton-item"></div>
+            <div class="skeleton-item"></div>
+            <div class="skeleton-item"></div>
+        </div>
+        <div class="skeleton-actions"></div>
     </div>
 
-    <div class="app-content">
-        <div class="container">
-            <!-- 输入框页面 -->
-            <div class="editor-page" id="editorPage">
+    <div class="container" id="appContainer">
+        <!-- 输入框页面 -->
+        <div class="page editor-page active" id="editorPage">
+            <div class="page-content">
+                <div class="editor-header">
+                    <h1>新建笔记</h1>
+                    <div class="character-count" id="characterCount">0字</div>
+                </div>
                 <textarea 
                     id="noteArea" 
                     class="note-area" 
-                    placeholder="开始记录您的想法..."
+                    placeholder="在这里写下您的灵感..."
+                    aria-label="便签输入区域"
                 ></textarea>
             </div>
-            
-            <!-- 灵感页面 -->
-            <div class="history-page" id="historyPage">
+        </div>
+        
+        <!-- 灵感页面 -->
+        <div class="page history-page" id="historyPage">
+            <div class="page-content">
                 <div class="history-header">
-                    <h1>灵感</h1>
+                    <h1>我的笔记</h1>
+                    <span class="history-count" id="historyCount">0条记录</span>
                 </div>
-                <div id="historyList" class="history-list"></div>
+                <div id="historyList" class="history-list" role="list">
+                    <!-- 动态内容 -->
+                </div>
             </div>
         </div>
-
-        <!-- 底部操作按钮 -->
-        <div class="bottom-actions">
-            <button class="action-btn history" id="togglePageBtn">灵感</button>
-            <button class="action-btn" id="saveBtn">保存</button>
-        </div>
     </div>
+
+    <!-- 底部操作栏 -->
+    <nav class="bottom-actions" role="navigation" aria-label="主要操作">
+        <button class="action-btn history" id="togglePageBtn" aria-label="切换至笔记列表">
+            <span class="btn-icon" role="img" aria-hidden="true">📚</span>
+            <span class="btn-text">笔记</span>
+        </button>
+        <button class="action-btn save" id="saveBtn" aria-label="保存笔记">
+            <span class="btn-icon" role="img" aria-hidden="true">✨</span>
+            <span class="btn-text">保存</span>
+        </button>
+    </nav>
 
     <script src="script.js"></script>
 </body>

@@ -1,385 +1,504 @@
-class QuickNoteApp {
+/**
+ * 精致便签应用 - 优化版本
+ * 添加右滑置顶功能
+ */
+class ElegantNoteApp {
     constructor() {
-        this.noteArea = document.getElementById('noteArea');
-        this.editorPage = document.getElementById('editorPage');
-        this.historyPage = document.getElementById('historyPage');
-        this.historyList = document.getElementById('historyList');
-        this.togglePageBtn = document.getElementById('togglePageBtn');
-        this.saveBtn = document.getElementById('saveBtn');
-        this.loadingElement = document.getElementById('loading');
-        this.appContent = document.querySelector('.app-content');
+        this.performance = {
+            lastSave: 0,
+            saveThreshold: 800
+        };
         
+        this.cache = {
+            history: null,
+            currentNote: ''
+        };
+        
+        this.init();
+    }
+    
+    init() {
+        // 立即缓存DOM
+        this.cacheDOM();
+        
+        // 显示骨架屏
+        this.showSkeleton();
+        
+        // 使用微任务初始化
+        Promise.resolve().then(() => {
+            this.initializeApp();
+            setTimeout(() => this.hideSkeleton(), 600);
+        }).catch(error => {
+            console.error('初始化失败:', error);
+            this.handleInitError();
+        });
+    }
+    
+    cacheDOM() {
+        // 一次性缓存所有DOM元素
+        this.elements = {
+            noteArea: document.getElementById('noteArea'),
+            editorPage: document.getElementById('editorPage'),
+            historyPage: document.getElementById('historyPage'),
+            historyList: document.getElementById('historyList'),
+            historyCount: document.getElementById('historyCount'),
+            characterCount: document.getElementById('characterCount'),
+            togglePageBtn: document.getElementById('togglePageBtn'),
+            saveBtn: document.getElementById('saveBtn'),
+            appContainer: document.getElementById('appContainer'),
+            skeleton: document.getElementById('skeleton')
+        };
+    }
+    
+    initializeApp() {
+        // 初始化状态
         this.CURRENT_NOTE_KEY = 'currentNote';
         this.HISTORY_KEY = 'noteHistory';
         this.editingIndex = null;
         this.isHistoryVisible = false;
+        this.swipeThreshold = 80;
         
-        this.touchStartX = 0;
-        this.isSwiping = false;
-        this.swipeThreshold = 60;
+        // 设置初始页面状态
+        this.elements.editorPage.classList.add('active');
         
-        // 预加载数据
-        this.preloadData().then(() => {
-            this.init();
-        });
-    }
-    
-    // 预加载数据
-    async preloadData() {
-        try {
-            // 并行加载所有数据
-            await Promise.all([
-                this.loadCurrentNote(),
-                this.loadHistory()
-            ]);
-        } catch (error) {
-            console.error('预加载数据失败:', error);
-        }
-    }
-    
-    async loadCurrentNote() {
-        return new Promise((resolve) => {
-            try {
-                const current = localStorage.getItem(this.CURRENT_NOTE_KEY);
-                if (current) {
-                    this.noteArea.value = current;
-                }
-                resolve();
-            } catch (error) {
-                console.error('加载当前内容失败:', error);
-                resolve();
-            }
-        });
-    }
-    
-    async loadHistory() {
-        return new Promise((resolve) => {
-            try {
-                const history = localStorage.getItem(this.HISTORY_KEY);
-                const historyArray = history ? JSON.parse(history) : [];
-                this.renderHistory(historyArray);
-                resolve();
-            } catch (error) {
-                console.error('加载历史记录失败:', error);
-                resolve();
-            }
-        });
-    }
-    
-    init() {
-        // 隐藏加载动画，显示内容
-        this.hideLoading();
+        // 加载数据
+        this.loadData();
         
         // 绑定事件
-        this.togglePageBtn.addEventListener('click', () => this.togglePage());
-        this.saveBtn.addEventListener('click', () => this.saveNow());
+        this.bindEvents();
         
-        // 首次进入时强制弹出键盘
-        this.forceShowKeyboard();
-        
-        // 页面事件监听
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                this.saveOnLeave();
-            } else {
-                // 当页面重新可见时，重新聚焦
-                setTimeout(() => {
-                    if (!this.isHistoryVisible) {
-                        this.noteArea.focus();
-                    }
-                }, 100);
-            }
-        });
-        
-        window.addEventListener('beforeunload', () => this.saveOnLeave());
-        
-        console.log('便签应用已初始化');
+        // 自动聚焦
+        this.autoFocus();
     }
     
-    hideLoading() {
-        if (this.loadingElement && this.appContent) {
-            setTimeout(() => {
-                this.loadingElement.style.opacity = '0';
-                this.appContent.classList.add('loaded');
-                
-                setTimeout(() => {
-                    this.loadingElement.style.display = 'none';
-                    // 加载完成后确保键盘弹出
-                    if (!this.isHistoryVisible) {
-                        this.forceShowKeyboard();
-                    }
-                }, 300);
-            }, 500);
+    loadData() {
+        // 并行加载数据
+        Promise.all([
+            this.loadCurrentNote(),
+            this.loadHistory()
+        ]).catch(error => {
+            console.error('数据加载失败:', error);
+        });
+    }
+    
+    showSkeleton() {
+        if (this.elements.skeleton) {
+            this.elements.skeleton.style.display = 'flex';
         }
     }
     
-    // 强制显示键盘的方法
-    forceShowKeyboard() {
-        if (this.isHistoryVisible) return;
+    hideSkeleton() {
+        if (this.elements.skeleton) {
+            this.elements.skeleton.style.display = 'none';
+        }
+        if (this.elements.appContainer) {
+            this.elements.appContainer.style.opacity = '1';
+        }
+    }
+    
+    bindEvents() {
+        const { togglePageBtn, saveBtn, noteArea, historyList } = this.elements;
         
-        console.log('强制显示键盘');
+        // 按钮事件
+        togglePageBtn.addEventListener('click', () => this.togglePage());
+        saveBtn.addEventListener('click', () => this.saveNow());
         
-        // 方法1: 直接聚焦并触发点击
-        this.noteArea.focus();
+        // 输入事件 - 实时更新字符计数
+        noteArea.addEventListener('input', () => {
+            this.updateCharacterCount();
+            this.debouncedSave();
+        });
         
-        // 方法2: 设置光标位置
-        const length = this.noteArea.value.length;
-        this.noteArea.setSelectionRange(length, length);
+        // 页面事件
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) this.saveOnLeave();
+        });
         
-        // 方法3: 触发虚拟键盘（如果支持）
-        this.triggerKeyboard();
+        // 触摸事件委托 - 支持左右滑动
+        historyList.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: true });
+        historyList.addEventListener('touchmove', (e) => this.handleTouchMove(e), { passive: false });
+        historyList.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: true });
+    }
+    
+    // 更新字符计数
+    updateCharacterCount() {
+        const length = this.elements.noteArea.value.length;
+        this.elements.characterCount.textContent = `${length}字`;
         
-        // 方法4: 延迟再次尝试（应对某些浏览器的限制）
+        // 根据长度改变颜色
+        if (length > 200) {
+            this.elements.characterCount.style.color = '#f56565';
+        } else if (length > 100) {
+            this.elements.characterCount.style.color = '#ed8936';
+        } else {
+            this.elements.characterCount.style.color = '';
+        }
+    }
+    
+    // 性能优化的防抖函数
+    debouncedSave = this.debounce(() => {
+        this.saveCurrentNote();
+    }, 500);
+    
+    debounce(func, wait) {
+        let timeout;
+        return (...args) => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+    
+    // 触摸事件处理 - 支持左右滑动
+    handleTouchStart(e) {
+        const item = e.target.closest('.history-item');
+        if (!item) return;
+        
+        this.currentSwipeItem = {
+            element: item,
+            startX: e.touches[0].clientX,
+            currentX: e.touches[0].clientX,
+            isSwiping: false,
+            distance: 0,
+            direction: null
+        };
+        
+        item.classList.remove('swiping-left', 'swiping-right');
+        item.style.transform = '';
+        item.style.transition = 'none';
+    }
+    
+    handleTouchMove(e) {
+        if (!this.currentSwipeItem) return;
+        
+        const { element, startX } = this.currentSwipeItem;
+        const currentX = e.touches[0].clientX;
+        const diffX = startX - currentX;
+        
+        this.currentSwipeItem.currentX = currentX;
+        this.currentSwipeItem.distance = diffX;
+        
+        // 确定滑动方向
+        if (Math.abs(diffX) > 10 && !this.currentSwipeItem.isSwiping) {
+            this.currentSwipeItem.isSwiping = true;
+            this.currentSwipeItem.direction = diffX > 0 ? 'left' : 'right';
+        }
+        
+        if (this.currentSwipeItem.isSwiping) {
+            // 左滑删除
+            if (this.currentSwipeItem.direction === 'left' && diffX > 0) {
+                const translateX = Math.min(diffX, 120);
+                element.style.transform = `translate3d(-${translateX}px, 0, 0)`;
+                element.classList.add('swiping-left');
+                element.classList.remove('swiping-right');
+                
+            // 右滑置顶
+            } else if (this.currentSwipeItem.direction === 'right' && diffX < 0) {
+                const translateX = Math.max(diffX, -120);
+                element.style.transform = `translate3d(${translateX}px, 0, 0)`;
+                element.classList.add('swiping-right');
+                element.classList.remove('swiping-left');
+            }
+            
+            if (Math.abs(diffX) > 20) {
+                e.preventDefault();
+            }
+        }
+    }
+    
+    handleTouchEnd(e) {
+        if (!this.currentSwipeItem) return;
+        
+        const { element, isSwiping, distance, direction } = this.currentSwipeItem;
+        
+        if (isSwiping && Math.abs(distance) > this.swipeThreshold) {
+            if (direction === 'left') {
+                // 左滑删除
+                this.deleteHistoryItemWithAnimation(element);
+            } else if (direction === 'right') {
+                // 右滑置顶/取消置顶
+                this.togglePinHistoryItemWithAnimation(element);
+            }
+        } else {
+            // 恢复位置
+            element.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
+            element.style.transform = 'translate3d(0, 0, 0)';
+            element.classList.remove('swiping-left', 'swiping-right');
+            
+            // 如果没有滑动，则视为点击
+            if (!isSwiping || Math.abs(distance) < 10) {
+                const index = parseInt(element.dataset.index);
+                this.startEditingHistory(index);
+            }
+        }
+        
+        this.currentSwipeItem = null;
+    }
+    
+    autoFocus() {
         setTimeout(() => {
-            this.noteArea.focus();
-            this.noteArea.click();
+            this.elements.noteArea.focus();
+            const length = this.elements.noteArea.value.length;
+            this.elements.noteArea.setSelectionRange(length, length);
+            this.updateCharacterCount();
         }, 800);
     }
     
-    // 触发键盘显示
-    triggerKeyboard() {
-        // 尝试使用虚拟键盘 API
-        if ('virtualKeyboard' in navigator) {
-            try {
-                navigator.virtualKeyboard.show();
-                console.log('使用虚拟键盘 API');
-            } catch (e) {
-                console.log('虚拟键盘 API 不可用');
-            }
-        }
-        
-        // 尝试通过创建临时输入框来触发键盘
-        this.createTempInput();
-    }
-    
-    // 创建临时输入框来触发键盘
-    createTempInput() {
-        const tempInput = document.createElement('input');
-        tempInput.style.position = 'absolute';
-        tempInput.style.top = '-100px';
-        tempInput.style.left = '0';
-        tempInput.style.height = '0';
-        tempInput.style.opacity = '0';
-        document.body.appendChild(tempInput);
-        
-        tempInput.focus();
-        
-        setTimeout(() => {
-            this.noteArea.focus();
-            document.body.removeChild(tempInput);
-        }, 100);
-    }
-    
     togglePage() {
-        if (this.isHistoryVisible) {
-            this.showEditorPage();
-        } else {
-            this.showHistoryPage();
-        }
+        this.isHistoryVisible ? this.showEditorPage() : this.showHistoryPage();
     }
     
     showEditorPage() {
-        this.editorPage.classList.remove('hidden');
-        this.editorPage.classList.add('sliding-down');
-        this.togglePageBtn.textContent = '灵感';
+        const { editorPage, historyPage, togglePageBtn, noteArea } = this.elements;
+        
+        historyPage.classList.remove('active');
+        historyPage.classList.add('slide-out-right');
+        
+        editorPage.classList.remove('hidden');
+        editorPage.classList.add('slide-in-left', 'active');
+        
+        togglePageBtn.innerHTML = '<span class="btn-icon">📚</span><span class="btn-text">笔记</span>';
         this.isHistoryVisible = false;
         
         setTimeout(() => {
-            this.editorPage.classList.remove('sliding-down');
-            // 返回编辑页面时强制弹出键盘
-            this.forceShowKeyboard();
+            editorPage.classList.remove('slide-in-left');
+            historyPage.classList.remove('slide-out-right', 'active');
+            noteArea.focus();
         }, 400);
     }
     
     showHistoryPage() {
-        // 切换到灵感页面时，先保存当前内容
+        const { editorPage, historyPage, togglePageBtn } = this.elements;
+        
         this.saveCurrentContent();
         
-        this.editorPage.classList.add('sliding-up');
-        this.togglePageBtn.textContent = '返回';
+        editorPage.classList.add('slide-out-left');
+        editorPage.classList.remove('active');
+        
+        historyPage.classList.add('slide-in-right', 'active');
+        
+        togglePageBtn.innerHTML = '<span class="btn-icon">📝</span><span class="btn-text">返回</span>';
         this.isHistoryVisible = true;
         
         setTimeout(() => {
-            this.editorPage.classList.add('hidden');
-            this.editorPage.classList.remove('sliding-up');
+            editorPage.classList.add('hidden');
+            editorPage.classList.remove('slide-out-left');
+            historyPage.classList.remove('slide-in-right');
         }, 400);
     }
     
-    // 保存当前编辑内容到历史记录
     saveCurrentContent() {
-        const content = this.noteArea.value.trim();
+        const content = this.elements.noteArea.value.trim();
         if (!content) return;
         
+        const now = Date.now();
+        if (now - this.performance.lastSave < this.performance.saveThreshold) return;
+        this.performance.lastSave = now;
+        
         try {
-            // 获取现有历史记录
-            const history = localStorage.getItem(this.HISTORY_KEY);
-            const historyArray = history ? JSON.parse(history) : [];
+            let historyArray = this.cache.history || [];
             
             if (this.editingIndex !== null) {
-                // 更新现有记录
-                historyArray[this.editingIndex] = {
-                    content: content,
-                    timestamp: Date.now()
+                // 更新现有笔记时保持置顶状态
+                const wasPinned = historyArray[this.editingIndex]?.pinned || false;
+                historyArray[this.editingIndex] = { 
+                    content, 
+                    timestamp: now,
+                    pinned: wasPinned
                 };
-                console.log('已更新记录');
             } else {
-                // 创建新记录
-                const newRecord = {
-                    content: content,
-                    timestamp: Date.now()
-                };
-                
-                // 添加到历史记录开头
-                historyArray.unshift(newRecord);
-                
-                // 限制历史记录数量（最多50条）
-                if (historyArray.length > 50) {
-                    historyArray.splice(50);
-                }
-                console.log('已创建新记录');
+                // 新笔记默认不置顶
+                historyArray.unshift({ 
+                    content, 
+                    timestamp: now,
+                    pinned: false
+                });
+                // 限制记录数量
+                if (historyArray.length > 100) historyArray.length = 100;
             }
             
-            // 保存历史记录
+            // 更新缓存和存储
+            this.cache.history = historyArray;
             localStorage.setItem(this.HISTORY_KEY, JSON.stringify(historyArray));
             
-            // 清空当前编辑状态
-            this.noteArea.value = '';
+            this.elements.noteArea.value = '';
             this.editingIndex = null;
             this.saveCurrentNote();
+            this.updateCharacterCount();
             
-            // 更新历史记录显示
             this.renderHistory(historyArray);
             
         } catch (error) {
-            console.error('保存内容失败:', error);
+            console.error('保存失败:', error);
         }
     }
     
     saveNow() {
-        const content = this.noteArea.value.trim();
+        const content = this.elements.noteArea.value.trim();
         if (content) {
             this.saveCurrentContent();
             this.showSaveFeedback();
+        } else {
+            this.showEmptyWarning();
         }
     }
     
     showSaveFeedback() {
-        const originalText = this.saveBtn.textContent;
-        this.saveBtn.textContent = '已保存';
-        this.saveBtn.style.background = '#52c41a';
+        const originalHTML = this.elements.saveBtn.innerHTML;
+        this.elements.saveBtn.innerHTML = '<span class="btn-icon">✅</span><span class="btn-text">已保存</span>';
+        this.elements.saveBtn.classList.add('save-feedback');
         
         setTimeout(() => {
-            this.saveBtn.textContent = originalText;
-            this.saveBtn.style.background = '#007bff';
+            this.elements.saveBtn.innerHTML = originalHTML;
+            this.elements.saveBtn.classList.remove('save-feedback');
         }, 1500);
     }
     
+    showEmptyWarning() {
+        const originalHTML = this.elements.saveBtn.innerHTML;
+        this.elements.saveBtn.innerHTML = '<span class="btn-icon">💭</span><span class="btn-text">写点什么吧</span>';
+        this.elements.saveBtn.style.background = 'var(--secondary-gradient)';
+        
+        setTimeout(() => {
+            this.elements.saveBtn.innerHTML = originalHTML;
+            this.elements.saveBtn.style.background = 'var(--success-gradient)';
+        }, 1200);
+    }
+    
+    loadCurrentNote() {
+        try {
+            const current = localStorage.getItem(this.CURRENT_NOTE_KEY);
+            if (current) {
+                this.elements.noteArea.value = current;
+                this.cache.currentNote = current;
+            }
+        } catch (error) {
+            console.error('加载当前内容失败:', error);
+        }
+    }
+    
+    loadHistory() {
+        try {
+            const history = localStorage.getItem(this.HISTORY_KEY);
+            const historyArray = history ? JSON.parse(history) : [];
+            this.cache.history = historyArray;
+            this.renderHistory(historyArray);
+        } catch (error) {
+            console.error('加载历史记录失败:', error);
+        }
+    }
+    
     renderHistory(historyArray) {
+        const { historyList, historyCount } = this.elements;
+        
+        // 更新计数
+        const pinnedCount = historyArray.filter(item => item.pinned).length;
+        const totalCount = historyArray.length;
+        historyCount.textContent = `${totalCount}条记录${pinnedCount > 0 ? ` (${pinnedCount}置顶)` : ''}`;
+        
         if (historyArray.length === 0) {
-            this.historyList.innerHTML = '<div class="empty-state">暂无灵感记录</div>';
+            historyList.innerHTML = `
+                <div class="empty-state">
+                    <div>还没有任何笔记记录</div>
+                    <div class="hint">点击下方按钮开始记录您的第一个灵感</div>
+                </div>
+            `;
             return;
         }
         
-        this.historyList.innerHTML = historyArray.map((item, index) => `
-            <div class="history-item ${index === this.editingIndex ? 'active' : ''}" data-index="${index}">
-                <div class="history-content">${this.escapeHtml(item.content)}</div>
-                <div class="history-time">${this.formatTime(item.timestamp)}</div>
-                <div class="delete-hint">删除</div>
-            </div>
-        `).join('');
-        
-        this.addSwipeEvents();
-    }
-    
-    addSwipeEvents() {
-        const items = this.historyList.querySelectorAll('.history-item');
-        
-        items.forEach(item => {
-            let startX = 0;
-            let currentX = 0;
-            let isSwiping = false;
-            
-            const onTouchStart = (e) => {
-                startX = e.touches[0].clientX;
-                currentX = startX;
-                isSwiping = false;
-                item.classList.remove('swiping');
-            };
-            
-            const onTouchMove = (e) => {
-                if (!startX) return;
-                
-                currentX = e.touches[0].clientX;
-                const diffX = startX - currentX;
-                
-                if (Math.abs(diffX) > 10) {
-                    e.preventDefault();
-                    isSwiping = true;
-                    
-                    if (diffX > 0) {
-                        const translateX = Math.min(diffX, 100);
-                        item.style.transform = `translateX(-${translateX}px)`;
-                        
-                        if (diffX > this.swipeThreshold) {
-                            item.classList.add('swiping');
-                        } else {
-                            item.classList.remove('swiping');
-                        }
-                    }
-                }
-            };
-            
-            const onTouchEnd = (e) => {
-                if (!startX) return;
-                
-                const diffX = startX - currentX;
-                
-                if (isSwiping && diffX > this.swipeThreshold) {
-                    this.deleteHistoryItemWithAnimation(item);
-                } else {
-                    item.style.transform = 'translateX(0)';
-                    item.classList.remove('swiping');
-                    
-                    if (!isSwiping) {
-                        const index = parseInt(item.dataset.index);
-                        this.startEditingHistory(index);
-                    }
-                }
-                
-                startX = 0;
-                isSwiping = false;
-            };
-            
-            item.addEventListener('touchstart', onTouchStart, { passive: true });
-            item.addEventListener('touchmove', onTouchMove, { passive: false });
-            item.addEventListener('touchend', onTouchEnd, { passive: true });
+        // 排序：置顶的在前，然后按时间倒序
+        const sortedArray = [...historyArray].sort((a, b) => {
+            if (a.pinned && !b.pinned) return -1;
+            if (!a.pinned && b.pinned) return 1;
+            return b.timestamp - a.timestamp;
         });
+        
+        // 使用DocumentFragment进行批量DOM操作
+        const fragment = document.createDocumentFragment();
+        
+        sortedArray.forEach((item, index) => {
+            const originalIndex = historyArray.findIndex(originalItem => 
+                originalItem.content === item.content && originalItem.timestamp === item.timestamp
+            );
+            
+            const div = document.createElement('div');
+            div.className = `history-item ${item.pinned ? 'pinned' : ''} ${originalIndex === this.editingIndex ? 'active' : ''}`;
+            div.setAttribute('data-index', originalIndex);
+            
+            div.innerHTML = `
+                <div class="history-content">${this.escapeHtml(item.content)}</div>
+                <div class="history-time">${this.formatCreateTime(item.timestamp)}</div>
+                <div class="action-hints delete-hint">
+                    <span>🗑️</span>
+                    <span>删除</span>
+                </div>
+                <div class="action-hints pin-hint">
+                    <span>${item.pinned ? '📌' : '📌'}</span>
+                    <span>${item.pinned ? '取消置顶' : '置顶'}</span>
+                </div>
+            `;
+            
+            fragment.appendChild(div);
+        });
+        
+        historyList.innerHTML = '';
+        historyList.appendChild(fragment);
     }
     
     deleteHistoryItemWithAnimation(item) {
         const index = parseInt(item.dataset.index);
         
+        item.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
         item.classList.add('deleting');
         
         setTimeout(() => {
             this.deleteHistoryItem(index);
-        }, 300);
+        }, 400);
+    }
+    
+    togglePinHistoryItemWithAnimation(item) {
+        const index = parseInt(item.dataset.index);
+        
+        item.style.transition = 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)';
+        item.classList.add('pinning');
+        item.classList.add('pin-feedback');
+        
+        setTimeout(() => {
+            this.togglePinHistoryItem(index);
+            setTimeout(() => {
+                item.classList.remove('pin-feedback');
+            }, 600);
+        }, 400);
+    }
+    
+    togglePinHistoryItem(index) {
+        try {
+            let historyArray = this.cache.history || [];
+            
+            if (historyArray[index]) {
+                // 切换置顶状态
+                historyArray[index].pinned = !historyArray[index].pinned;
+                
+                this.cache.history = historyArray;
+                localStorage.setItem(this.HISTORY_KEY, JSON.stringify(historyArray));
+                
+                this.renderHistory(historyArray);
+            }
+        } catch (error) {
+            console.error('切换置顶状态失败:', error);
+        }
     }
     
     startEditingHistory(index) {
         try {
-            const history = localStorage.getItem(this.HISTORY_KEY);
-            const historyArray = history ? JSON.parse(history) : [];
+            const historyArray = this.cache.history || [];
             
             if (historyArray[index]) {
                 const item = historyArray[index];
-                
-                this.noteArea.value = item.content;
+                this.elements.noteArea.value = item.content;
                 this.editingIndex = index;
                 this.saveCurrentNote();
-                
+                this.updateCharacterCount();
                 this.showEditorPage();
-                
                 this.renderHistory(historyArray);
             }
         } catch (error) {
@@ -389,74 +508,70 @@ class QuickNoteApp {
     
     saveCurrentNote() {
         try {
-            const content = this.noteArea.value;
+            const content = this.elements.noteArea.value;
             localStorage.setItem(this.CURRENT_NOTE_KEY, content);
+            this.cache.currentNote = content;
         } catch (error) {
             console.error('保存当前内容失败:', error);
         }
     }
     
     saveOnLeave() {
-        const content = this.noteArea.value.trim();
+        const content = this.elements.noteArea.value.trim();
         if (!content) return;
         
         try {
-            const history = localStorage.getItem(this.HISTORY_KEY);
-            const historyArray = history ? JSON.parse(history) : [];
+            let historyArray = this.cache.history || [];
             
             if (this.editingIndex !== null) {
-                historyArray[this.editingIndex] = {
-                    content: content,
-                    timestamp: Date.now()
+                // 更新时保持置顶状态
+                const wasPinned = historyArray[this.editingIndex]?.pinned || false;
+                historyArray[this.editingIndex] = { 
+                    content, 
+                    timestamp: Date.now(),
+                    pinned: wasPinned
                 };
-                console.log('已更新记录');
             } else {
-                const newRecord = {
-                    content: content,
-                    timestamp: Date.now()
-                };
-                
-                historyArray.unshift(newRecord);
-                
-                if (historyArray.length > 50) {
-                    historyArray.splice(50);
-                }
-                console.log('已创建新记录');
+                historyArray.unshift({ 
+                    content, 
+                    timestamp: Date.now(),
+                    pinned: false
+                });
+                if (historyArray.length > 100) historyArray.length = 100;
             }
             
+            this.cache.history = historyArray;
             localStorage.setItem(this.HISTORY_KEY, JSON.stringify(historyArray));
             
-            this.noteArea.value = '';
+            this.elements.noteArea.value = '';
             this.editingIndex = null;
             this.saveCurrentNote();
-            
-            this.renderHistory(historyArray);
+            this.updateCharacterCount();
             
         } catch (error) {
-            console.error('保存内容失败:', error);
+            console.error('离开页面时保存失败:', error);
         }
     }
     
     deleteHistoryItem(index) {
         try {
-            const history = localStorage.getItem(this.HISTORY_KEY);
-            const historyArray = history ? JSON.parse(history) : [];
-            
+            let historyArray = this.cache.history || [];
             historyArray.splice(index, 1);
             
+            this.cache.history = historyArray;
             localStorage.setItem(this.HISTORY_KEY, JSON.stringify(historyArray));
             
             if (this.editingIndex === index) {
-                this.noteArea.value = '';
+                this.elements.noteArea.value = '';
                 this.editingIndex = null;
                 this.saveCurrentNote();
+                this.updateCharacterCount();
             } else if (this.editingIndex > index) {
                 this.editingIndex--;
             }
             
             this.renderHistory(historyArray);
             
-            console.log('已删除记录');
         } catch (error) {
             console.error('删除记录失败:', error);
         }
@@ -468,32 +583,81 @@ class QuickNoteApp {
         return div.innerHTML;
     }
     
-    formatTime(timestamp) {
-        const date = new Date(timestamp);
+    /**
+     * 格式化创建时间 - 显示具体的创建日期和时间
+     * 格式规则：
+     * - 今天：今天 HH:mm
+     * - 昨天：昨天 HH:mm  
+     * - 一周内：周X HH:mm
+     * - 今年：MM月DD日 HH:mm
+     * - 其他年份：YYYY年MM月DD日 HH:mm
+     */
+    formatCreateTime(timestamp) {
+        const createDate = new Date(timestamp);
         const now = new Date();
-        const diff = now - date;
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
         
-        if (diff < 60000) {
-            return '刚刚';
-        } else if (diff < 3600000) {
-            return `${Math.floor(diff / 60000)}分钟前`;
-        } else if (diff < 86400000) {
-            return `${Math.floor(diff / 3600000)}小时前`;
+        const createDay = new Date(createDate.getFullYear(), createDate.getMonth(), createDate.getDate());
+        
+        // 时间部分始终显示
+        const timeStr = createDate.toLocaleTimeString('zh-CN', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+        
+        // 判断日期部分
+        if (createDay.getTime() === today.getTime()) {
+            return `今天 ${timeStr}`;
+        } else if (createDay.getTime() === yesterday.getTime()) {
+            return `昨天 ${timeStr}`;
+        } else if (now - createDate < 7 * 24 * 60 * 60 * 1000) {
+            // 一周内显示星期几
+            const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+            const weekday = weekdays[createDate.getDay()];
+            return `周${weekday} ${timeStr}`;
+        } else if (createDate.getFullYear() === now.getFullYear()) {
+            // 今年显示月日
+            const month = createDate.getMonth() + 1;
+            const day = createDate.getDate();
+            return `${month}月${day}日 ${timeStr}`;
         } else {
-            return date.toLocaleDateString();
+            // 其他年份显示完整日期
+            const year = createDate.getFullYear();
+            const month = createDate.getMonth() + 1;
+            const day = createDate.getDate();
+            return `${year}年${month}月${day}日 ${timeStr}`;
+        }
+    }
+    
+    handleInitError() {
+        if (this.elements.skeleton) {
+            this.elements.skeleton.innerHTML = `
+                <div style="padding: 60px 28px; text-align: center; background: white; border-radius: 24px;">
+                    <div style="font-size: 64px; margin-bottom: 20px;">😔</div>
+                    <div style="color: #2d3748; font-size: 18px; margin-bottom: 8px;">加载失败</div>
+                    <div style="color: #718096; font-size: 15px; margin-bottom: 24px;">请刷新页面重试</div>
+                    <button onclick="window.location.reload()" style="padding: 14px 28px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 16px; cursor: pointer; font-size: 16px; font-weight: 600;">
+                        重新加载
+                    </button>
+                </div>
+            `;
         }
     }
 }
 
-// 全局实例
-let app;
+// 错误边界
+window.addEventListener('error', (event) => {
+    console.error('全局错误:', event.error);
+});
 
-// 使用最快的初始化方式
+// 使用DOMContentLoaded确保DOM就绪
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-        app = new QuickNoteApp();
+        new ElegantNoteApp();
     });
 } else {
-    // DOM 已经就绪，立即初始化
-    app = new QuickNoteApp();
+    new ElegantNoteApp();
 }
