@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HabitFlow - 专业习惯追踪</title>
+    <meta name="description" content="专业的习惯养成应用，帮助您建立持久的好习惯">
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- 加载界面 -->
+    <div id="loading-screen" class="loading-screen">
+        <div class="loading-spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div class="app-container">
+        <!-- 主打卡页面 -->
+        <div id="main-page" class="page active">
+            <header class="app-header">
+                <div class="header-content">
+                    <h1 class="app-title">HabitFlow</h1>
+                    <p class="app-subtitle">专业习惯追踪</p>
+                </div>
+                <button class="settings-btn" id="settings-btn" aria-label="设置">
+                    <i class="fas fa-cog"></i>
+                </button>
+            </header>
+
+            <div class="date-section">
+                <div class="date-display">
+                    <div class="date-info">
+                        <span id="current-date" class="date-text">2023年11月1日</span>
+                        <span id="current-day" class="day-text">星期三</span>
+                    </div>
+                    <div class="motivation-text" id="motivation-text">每一天都是新的开始！</div>
+                </div>
+            </div>
+
+            <main class="main-content">
+                <div class="habits-section">
+                    <div class="section-header">
+                        <h2>今日习惯</h2>
+                        <span class="completion-count" id="completion-count">0/0</span>
+                    </div>
+                    
+                    <div class="habits-container">
+                        <div class="habits-grid" id="habits-grid">
+                            <!-- 习惯卡片将通过JS动态生成 -->
+                        </div>
+                    </div>
+
+                    <div class="empty-state" id="empty-state">
+                        <div class="empty-icon">
+                            <i class="fas fa-plus-circle"></i>
+                        </div>
+                        <h3>还没有任何习惯</h3>
+                        <p>点击下方按钮添加您的第一个习惯</p>
+                    </div>
+                </div>
+            </main>
+
+            <div class="action-section">
+                <div class="action-buttons">
+                    <button class="action-btn primary-btn" id="check-all-btn">
+                        <i class="fas fa-check-double"></i>
+                        <span>一键打卡</span>
+                    </button>
+                    <button class="action-btn secondary-btn" id="stats-btn">
+                        <i class="fas fa-chart-bar"></i>
+                        <span>数据统计</span>
+                    </button>
+                </div>
+            </div>
+
+            <button class="floating-action-btn" id="add-habit-btn" aria-label="添加习惯">
+                <i class="fas fa-plus"></i>
+            </button>
+        </div>
+
+        <!-- 添加习惯页面 -->
+        <div id="add-habit-page" class="page">
+            <header class="app-header">
+                <div class="header-content">
+                    <button class="back-btn" id="back-from-add-btn">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <h1 class="app-title">添加习惯</h1>
+                </div>
+            </header>
+
+            <main class="main-content">
+                <div class="form-section">
+                    <div class="input-group">
+                        <label for="habit-name" class="input-label">习惯名称</label>
+                        <input type="text" id="habit-name" class="text-input" placeholder="例如：晨跑、阅读、冥想..." maxlength="20">
+                        <div class="char-counter"><span id="char-count">0</span>/20</div>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">选择图标</label>
+                        <div class="icon-options" id="icon-options">
+                            <!-- 图标选项将通过JS动态生成 -->
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">选择颜色</label>
+                        <div class="color-options" id="color-options">
+                            <!-- 颜色选项将通过JS动态生成 -->
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label for="habit-category" class="input-label">分类</label>
+                        <select id="habit-category" class="select-input">
+                            <option value="health">健康</option>
+                            <option value="learning">学习</option>
+                            <option value="work">工作</option>
+                            <option value="life">生活</option>
+                            <option value="other">其他</option>
+                        </select>
+                    </div>
+                </div>
+            </main>
+
+            <div class="action-section">
+                <button class="action-btn primary-btn full-width" id="save-habit-btn" disabled>
+                    <i class="fas fa-save"></i>
+                    <span>添加习惯</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 数据统计页面 -->
+        <div id="stats-page" class="page">
+            <header class="app-header">
+                <div class="header-content">
+                    <button class="back-btn" id="back-from-stats-btn">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <h1 class="app-title">数据统计</h1>
+                </div>
+                <button class="export-btn" id="export-btn" aria-label="导出数据">
+                    <i class="fas fa-download"></i>
+                </button>
+            </header>
+
+            <main class="main-content">
+                <div class="stats-section">
+                    <div class="stats-overview">
+                        <div class="stat-card">
+                            <div class="stat-icon success">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="total-completed">0</div>
+                                <div class="stat-label">总打卡次数</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon primary">
+                                <i class="fas fa-chart-line"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="completion-rate">0%</div>
+                                <div class="stat-label">平均完成率</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon warning">
+                                <i class="fas fa-fire"></i>
+                            </div>
+                            <div class="stat-content">
+                                <div class="stat-value" id="current-streak">0</div>
+                                <div class="stat-label">最长连续天数</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="habits-stats">
+                        <h3 class="section-title">习惯详情</h3>
+                        <div class="habits-list" id="habits-stats-list">
+                            <!-- 习惯统计列表将通过JS动态生成 -->
+                        </div>
+                    </div>
+
+                    <div class="weekly-stats">
+                        <h3 class="section-title">本周完成情况</h3>
+                        <div class="week-chart" id="week-chart">
+                            <!-- 周统计图表将通过JS动态生成 -->
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+
+        <!-- 设置页面 -->
+        <div id="settings-page" class="page">
+            <header class="app-header">
+                <div class="header-content">
+                    <button class="back-btn" id="back-from-settings-btn">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <h1 class="app-title">设置</h1>
+                </div>
+            </header>
+
+            <main class="main-content">
+                <div class="settings-section">
+                    <div class="setting-group">
+                        <h3 class="setting-title">数据管理</h3>
+                        <div class="setting-options">
+                            <button class="setting-option" id="export-data-btn">
+                                <div class="option-content">
+                                    <i class="fas fa-file-export"></i>
+                                    <span>导出数据</span>
+                                </div>
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                            <button class="setting-option" id="import-data-btn">
+                                <div class="option-content">
+                                    <i class="fas fa-file-import"></i>
+                                    <span>导入数据</span>
+                                </div>
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                            <button class="setting-option danger" id="clear-data-btn">
+                                <div class="option-content">
+                                    <i class="fas fa-trash"></i>
+                                    <span>清空所有数据</span>
+                                </div>
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h3 class="setting-title">个性化</h3>
+                        <div class="setting-options">
+                            <div class="setting-option toggle-option">
+                                <div class="option-content">
+                                    <i class="fas fa-moon"></i>
+                                    <span>深色模式</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="dark-mode-toggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
+                        <h3 class="setting-title">关于</h3>
+                        <div class="setting-options">
+                            <div class="setting-option">
+                                <div class="option-content">
+                                    <i class="fas fa-info-circle"></i>
+                                    <span>版本信息</span>
+                                </div>
+                                <span class="option-value">v2.1.0</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 确认删除对话框 -->
+    <div id="delete-dialog" class="dialog-overlay" style="display: none;">
+        <div class="dialog">
+            <div class="dialog-header">
+                <h3>删除习惯</h3>
+            </div>
+            <div class="dialog-content">
+                <p>确定要删除习惯 "<span id="delete-habit-name"></span>" 吗？此操作不可撤销。</p>
+            </div>
+            <div class="dialog-actions">
+                <button class="dialog-btn secondary" id="cancel-delete-btn">取消</button>
+                <button class="dialog-btn danger" id="confirm-delete-btn">删除</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知容器 -->
+    <div id="notification-container" class="notification-container"></div>
+
+    <!-- 导入数据输入 -->
+    <input type="file" id="import-file-input" accept=".json" style="display: none;">
+
+    <script src="script.js"></script>
+</body>
+</html>
