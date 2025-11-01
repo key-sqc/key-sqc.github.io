@@ -5,11 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HabitFlow - 专业习惯追踪</title>
     <meta name="description" content="专业的习惯养成应用，帮助您建立持久的好习惯">
-    <link rel="stylesheet" href="style.css">
+    <meta name="theme-color" content="#4361ee">
+    
+    <!-- PWA 相关 meta 标签 -->
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📅</text></svg>">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="HabitFlow">
+    
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- 安装提示 -->
+    <div id="install-prompt" class="install-prompt" style="display: none;">
+        <div class="install-content">
+            <div class="install-icon">
+                <i class="fas fa-download"></i>
+            </div>
+            <div class="install-text">
+                <h3>安装 HabitFlow</h3>
+                <p>安装到您的设备，获得更好的体验</p>
+            </div>
+            <div class="install-actions">
+                <button class="install-btn secondary" id="install-later">稍后</button>
+                <button class="install-btn primary" id="install-now">安装</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 加载界面 -->
     <div id="loading-screen" class="loading-screen">
         <div class="loading-spinner"></div>
@@ -211,6 +237,29 @@
             <main class="main-content">
                 <div class="settings-section">
                     <div class="setting-group">
+                        <h3 class="setting-title">应用</h3>
+                        <div class="setting-options">
+                            <button class="setting-option" id="install-app-btn">
+                                <div class="option-content">
+                                    <i class="fas fa-download"></i>
+                                    <span>安装应用</span>
+                                </div>
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                            <div class="setting-option toggle-option">
+                                <div class="option-content">
+                                    <i class="fas fa-moon"></i>
+                                    <span>深色模式</span>
+                                </div>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="dark-mode-toggle">
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="setting-group">
                         <h3 class="setting-title">数据管理</h3>
                         <div class="setting-options">
                             <button class="setting-option" id="export-data-btn">
@@ -238,22 +287,6 @@
                     </div>
 
                     <div class="setting-group">
-                        <h3 class="setting-title">个性化</h3>
-                        <div class="setting-options">
-                            <div class="setting-option toggle-option">
-                                <div class="option-content">
-                                    <i class="fas fa-moon"></i>
-                                    <span>深色模式</span>
-                                </div>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="dark-mode-toggle">
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="setting-group">
                         <h3 class="setting-title">关于</h3>
                         <div class="setting-options">
                             <div class="setting-option">
@@ -261,7 +294,14 @@
                                     <i class="fas fa-info-circle"></i>
                                     <span>版本信息</span>
                                 </div>
-                                <span class="option-value">v2.1.0</span>
+                                <span class="option-value">v2.2.0</span>
+                            </div>
+                            <div class="setting-option">
+                                <div class="option-content">
+                                    <i class="fas fa-wifi"></i>
+                                    <span>网络状态</span>
+                                </div>
+                                <span class="option-value" id="network-status">在线</span>
                             </div>
                         </div>
                     </div>

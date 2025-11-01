@@ -6,6 +6,8 @@ class HabitFlowApp {
         this.currentPage = 'main';
         this.settings = {};
         this.habitToDelete = null;
+        this.deferredPrompt = null;
+        this.isOnline = navigator.onLine;
         this.init();
     }
 
@@ -15,12 +17,89 @@ class HabitFlowApp {
             this.showLoading();
             await this.loadData();
             this.setupEventListeners();
+            this.setupPWA();
+            this.setupNetworkListener();
             this.render();
             this.hideLoading();
             this.showNotification('应用加载成功', 'success');
         } catch (error) {
             console.error('应用初始化失败:', error);
             this.showNotification('应用加载失败，请刷新页面', 'error');
+        }
+    }
+
+    // 设置PWA功能
+    setupPWA() {
+        // 监听beforeinstallprompt事件
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            this.deferredPrompt = e;
+            this.showInstallPrompt();
+        });
+
+        // 监听应用安装完成
+        window.addEventListener('appinstalled', () => {
+            this.deferredPrompt = null;
+            this.hideInstallPrompt();
+            this.showNotification('应用安装成功！', 'success');
+        });
+
+        // 检查是否已安装
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+            console.log('应用已安装');
+        }
+    }
+
+    // 显示安装提示
+    showInstallPrompt() {
+        const installPrompt = document.getElementById('install-prompt');
+        if (installPrompt) {
+            installPrompt.style.display = 'flex';
+        }
+    }
+
+    // 隐藏安装提示
+    hideInstallPrompt() {
+        const installPrompt = document.getElementById('install-prompt');
+        if (installPrompt) {
+            installPrompt.style.display = 'none';
+        }
+    }
+
+    // 安装应用
+    async installApp() {
+        if (this.deferredPrompt) {
+            this.deferredPrompt.prompt();
+            const { outcome } = await this.deferredPrompt.userChoice;
+            if (outcome === 'accepted') {
+                this.deferredPrompt = null;
+            }
+        }
+    }
+
+    // 设置网络状态监听
+    setupNetworkListener() {
+        window.addEventListener('online', () => {
+            this.isOnline = true;
+            this.updateNetworkStatus();
+            this.showNotification('网络已连接', 'success');
+        });
+
+        window.addEventListener('offline', () => {
+            this.isOnline = false;
+            this.updateNetworkStatus();
+            this.showNotification('网络已断开', 'error');
+        });
+
+        this.updateNetworkStatus();
+    }
+
+    // 更新网络状态显示
+    updateNetworkStatus() {
+        const statusElement = document.getElementById('network-status');
+        if (statusElement) {
+            statusElement.textContent = this.isOnline ? '在线' : '离线';
+            statusElement.style.color = this.isOnline ? 'var(--success-color)' : 'var(--danger-color)';
         }
     }
 
@@ -101,6 +180,7 @@ class HabitFlowApp {
         document.getElementById('import-data-btn').addEventListener('click', () => this.importData());
         document.getElementById('clear-data-btn').addEventListener('click', () => this.clearData());
         document.getElementById('export-btn').addEventListener('click', () => this.exportData());
+        document.getElementById('install-app-btn').addEventListener('click', () => this.installApp());
 
         // 设置切换
         document.getElementById('dark-mode-toggle').addEventListener('change', (e) => this.toggleDarkMode(e.target.checked));
@@ -114,6 +194,10 @@ class HabitFlowApp {
         // 删除对话框
         document.getElementById('cancel-delete-btn').addEventListener('click', () => this.hideDeleteDialog());
         document.getElementById('confirm-delete-btn').addEventListener('click', () => this.confirmDeleteHabit());
+
+        // 安装提示
+        document.getElementById('install-now').addEventListener('click', () => this.installApp());
+        document.getElementById('install-later').addEventListener('click', () => this.hideInstallPrompt());
     }
 
     // 显示页面
@@ -197,7 +281,7 @@ class HabitFlowApp {
         });
     }
 
-    // 创建习惯元素 - 修复颜色bug和添加删除功能
+    // 创建习惯元素
     createHabitElement(habit, index, isCompleted) {
         const habitDiv = document.createElement('div');
         habitDiv.className = `habit-circle ${isCompleted ? 'completed' : ''}`;
@@ -301,7 +385,7 @@ class HabitFlowApp {
         );
     }
 
-    // 切换习惯完成状态 - 修复颜色问题
+    // 切换习惯完成状态
     toggleHabitCompletion(index) {
         if (index < 0 || index >= this.habits.length) return;
 
@@ -320,11 +404,11 @@ class HabitFlowApp {
         }
 
         this.saveData();
-        this.renderHabits(); // 重新渲染确保颜色正确更新
+        this.renderHabits();
         this.updateCompletionCount();
     }
 
-    // 一键打卡所有习惯 - 修复颜色问题
+    // 一键打卡所有习惯
     checkAllHabits() {
         const today = new Date().toDateString();
         let completedCount = 0;
@@ -341,7 +425,7 @@ class HabitFlowApp {
         });
 
         this.saveData();
-        this.renderHabits(); // 重新渲染确保颜色正确
+        this.renderHabits();
         this.updateCompletionCount();
 
         if (completedCount > 0) {
@@ -678,7 +762,7 @@ class HabitFlowApp {
             habits: this.habits,
             settings: this.settings,
             exportDate: new Date().toISOString(),
-            version: '2.1.0'
+            version: '2.2.0'
         };
 
         const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -810,3 +894,17 @@ window.addEventListener('error', (event) => {
 window.addEventListener('unhandledrejection', (event) => {
     console.error('未处理的Promise拒绝:', event.reason);
 });
+
+// 注册Service Worker - GitHub适配版
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        // 使用相对路径注册Service Worker
+        navigator.serviceWorker.register('./sw.js')
+            .then((registration) => {
+                console.log('SW registered: ', registration);
+            })
+            .catch((registrationError) => {
+                console.log('SW registration failed: ', registrationError);
+            });
+    });
+}

@@ -84,6 +84,83 @@ body {
     align-items: center;
     justify-content: center;
     transition: var(--transition);
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* 安装提示 */
+.install-prompt {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+}
+
+.install-content {
+    background: var(--bg-primary);
+    border-radius: var(--border-radius-xl);
+    padding: var(--spacing-xl);
+    max-width: 400px;
+    width: 90%;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+    text-align: center;
+}
+
+.install-icon {
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-lg);
+}
+
+.install-text h3 {
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+}
+
+.install-text p {
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-lg);
+}
+
+.install-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    justify-content: center;
+}
+
+.install-btn {
+    padding: var(--spacing-md) var(--spacing-lg);
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-weight: 500;
+    transition: var(--transition);
+    min-width: 100px;
+}
+
+.install-btn.primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.install-btn.primary:hover {
+    background: var(--primary-dark);
+}
+
+.install-btn.secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.install-btn.secondary:hover {
+    background: var(--bg-tertiary);
 }
 
 /* 加载界面 */
@@ -263,7 +340,7 @@ body {
     border-radius: var(--border-radius);
 }
 
-/* 习惯网格 - 修复布局问题 */
+/* 习惯网格 */
 .habits-container {
     margin-bottom: var(--spacing-lg);
 }
@@ -949,6 +1026,22 @@ input:checked + .toggle-slider:before {
     
     .icon-options, .color-options {
         grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+    body {
+        padding: 0;
+        background: var(--bg-primary);
+    }
+    
+    .app-container {
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+        min-height: 100vh;
+        max-width: none;
     }
 }
 
