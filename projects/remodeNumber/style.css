@@ -1,0 +1,591 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+:root {
+    --primary: #667eea;
+    --primary-dark: #5a6fd8;
+    --secondary: #764ba2;
+    --accent: #f093fb;
+    --success: #4ade80;
+    --success-glow: #86efac;
+    --warning: #fbbf24;
+    --danger: #f87171;
+    --danger-glow: #fca5a5;
+    --background: #0f172a;
+    --surface: #1e293b;
+    --surface-light: #334155;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --combo-color: #f59e0b;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: var(--background);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-primary);
+    padding: 20px;
+}
+
+.screen {
+    display: none;
+    width: 100%;
+    max-width: 450px;
+}
+
+.screen.active {
+    display: block;
+}
+
+.container {
+    background: var(--surface);
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    text-align: center;
+    width: 100%;
+    border: 1px solid var(--surface-light);
+}
+
+/* 开始界面样式 */
+h1 {
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    font-size: 2.2em;
+    background: linear-gradient(45deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+h2 {
+    color: var(--text-primary);
+    margin-bottom: 20px;
+    font-size: 1.8em;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    margin-bottom: 30px;
+    font-size: 1em;
+}
+
+.input-group {
+    margin: 20px 0;
+    text-align: left;
+}
+
+label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+input, select {
+    width: 100%;
+    padding: 12px 15px;
+    background: var(--background);
+    border: 2px solid var(--surface-light);
+    border-radius: 10px;
+    font-size: 16px;
+    transition: all 0.3s ease;
+    color: var(--text-primary);
+}
+
+input:focus, select:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.btn-primary {
+    background: linear-gradient(45deg, var(--primary), var(--secondary));
+    color: white;
+    border: none;
+    padding: 15px 30px;
+    font-size: 1.1em;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    margin-top: 10px;
+    width: 100%;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+}
+
+.btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border: 2px solid var(--surface-light);
+    padding: 12px 30px;
+    font-size: 1em;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 600;
+    width: 100%;
+    margin-top: 10px;
+}
+
+.btn-secondary:hover {
+    background: var(--surface-light);
+    border-color: var(--primary);
+}
+
+/* 游戏界面样式 */
+#gameScreen {
+    background: var(--background);
+    border-radius: 20px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    position: relative;
+}
+
+.game-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--background);
+    transition: all 0.5s ease;
+    z-index: 1;
+}
+
+.particles-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.particle {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: particleFloat 1s ease-out forwards;
+}
+
+@keyframes particleFloat {
+    0% {
+        transform: translate(0, 0) scale(1);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(var(--tx), var(--ty)) scale(0);
+        opacity: 0;
+    }
+}
+
+.combo-display {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(245, 158, 11, 0.9);
+    padding: 10px 15px;
+    border-radius: 20px;
+    text-align: center;
+    z-index: 10;
+    transform: scale(0);
+    transition: transform 0.3s ease;
+}
+
+.combo-display.active {
+    transform: scale(1);
+}
+
+.combo-text {
+    font-size: 0.8em;
+    color: white;
+    font-weight: 600;
+}
+
+.combo-count {
+    font-size: 1.4em;
+    color: white;
+    font-weight: bold;
+}
+
+.game-content {
+    position: relative;
+    z-index: 3;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.game-header {
+    background: rgba(30, 41, 59, 0.9);
+    padding: 20px;
+    border-bottom: 1px solid var(--surface-light);
+}
+
+.stats {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.timer-container {
+    background: var(--surface-light);
+    border-radius: 10px;
+    height: 8px;
+    overflow: hidden;
+    position: relative;
+}
+
+.timer-bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--success), var(--warning));
+    width: 100%;
+    transition: width 1s linear;
+    border-radius: 10px;
+    position: relative;
+}
+
+.timer-bar::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+.timer-bar.warning {
+    background: linear-gradient(90deg, var(--warning), var(--danger));
+}
+
+.timer-bar.danger {
+    background: linear-gradient(90deg, var(--danger), var(--primary));
+}
+
+.question-container {
+    padding: 40px 20px;
+    text-align: center;
+    position: relative;
+}
+
+.question {
+    font-size: 2.5em;
+    font-weight: bold;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+    transition: all 0.3s ease;
+}
+
+.question.correct {
+    animation: questionCorrect 0.6s ease;
+}
+
+.question.wrong {
+    animation: questionWrong 0.6s ease;
+}
+
+@keyframes questionCorrect {
+    0% { transform: scale(1); color: var(--text-primary); }
+    50% { transform: scale(1.1); color: var(--success); }
+    100% { transform: scale(1); color: var(--text-primary); }
+}
+
+@keyframes questionWrong {
+    0% { transform: scale(1); color: var(--text-primary); }
+    50% { transform: scale(0.9); color: var(--danger); }
+    100% { transform: scale(1); color: var(--text-primary); }
+}
+
+.question-hint {
+    font-size: 1em;
+    color: var(--text-secondary);
+    margin-top: 10px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.question-hint.show {
+    opacity: 1;
+}
+
+.options-container {
+    padding: 0 20px 20px;
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.option {
+    background: var(--surface);
+    border: 2px solid var(--surface-light);
+    border-radius: 15px;
+    padding: 20px 10px;
+    font-size: 1.2em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 80px;
+}
+
+.option:hover {
+    transform: translateY(-2px);
+    border-color: var(--primary);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.2);
+}
+
+.option.correct {
+    background: var(--success);
+    border-color: var(--success);
+    color: white;
+    transform: scale(1.05);
+    box-shadow: 0 0 30px var(--success-glow);
+    animation: optionPulse 0.6s ease;
+}
+
+.option.wrong {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+    transform: scale(0.95);
+    box-shadow: 0 0 30px var(--danger-glow);
+    animation: optionShake 0.6s ease;
+}
+
+@keyframes optionPulse {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 var(--success-glow); }
+    50% { transform: scale(1.1); box-shadow: 0 0 30px var(--success-glow); }
+    100% { transform: scale(1.05); box-shadow: 0 0 30px var(--success-glow); }
+}
+
+@keyframes optionShake {
+    0%, 100% { transform: translateX(0) scale(0.95); }
+    25% { transform: translateX(-5px) scale(0.95); }
+    75% { transform: translateX(5px) scale(0.95); }
+}
+
+.option-text {
+    position: relative;
+    z-index: 2;
+}
+
+.option-effect {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at center, rgba(255,255,255,0.3) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.option:hover .option-effect {
+    opacity: 1;
+}
+
+.score-popup {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 2.5em;
+    font-weight: bold;
+    color: var(--success);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 100;
+    text-shadow: 0 0 20px rgba(74, 222, 128, 0.5);
+    animation: scorePopup 1s ease-out forwards;
+}
+
+@keyframes scorePopup {
+    0% {
+        opacity: 0;
+        transform: translate(-50%, -50%) scale(0.5);
+    }
+    50% {
+        opacity: 1;
+        transform: translate(-50%, -60%) scale(1.2);
+    }
+    100% {
+        opacity: 0;
+        transform: translate(-50%, -80%) scale(1);
+    }
+}
+
+.feedback-container {
+    padding: 0 20px 20px;
+}
+
+.feedback {
+    background: var(--surface);
+    border-radius: 15px;
+    padding: 15px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 1.1em;
+    min-height: 60px;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--surface-light);
+    color: var(--text-primary);
+}
+
+.feedback.correct {
+    background: var(--success);
+    color: white;
+    border-color: var(--success);
+    transform: scale(1.05);
+    animation: feedbackPulse 0.6s ease;
+}
+
+.feedback.wrong {
+    background: var(--danger);
+    color: white;
+    border-color: var(--danger);
+    transform: scale(0.95);
+    animation: feedbackShake 0.6s ease;
+}
+
+@keyframes feedbackPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1.05); }
+}
+
+@keyframes feedbackShake {
+    0%, 100% { transform: translateX(0) scale(0.95); }
+    25% { transform: translateX(-3px) scale(0.95); }
+    75% { transform: translateX(3px) scale(0.95); }
+}
+
+.feedback-text {
+    font-size: 1.1em;
+}
+
+/* 结束界面样式 */
+.result-header {
+    margin-bottom: 20px;
+}
+
+.final-score {
+    font-size: 3em;
+    font-weight: bold;
+    background: linear-gradient(45deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 10px 0;
+}
+
+.results {
+    background: var(--surface-light);
+    border-radius: 15px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+.result-item {
+    display: flex;
+    justify-content: space-between;
+    margin: 10px 0;
+    font-size: 1.1em;
+}
+
+.result-item span:last-child {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.performance-comment {
+    margin: 20px 0;
+    padding: 15px;
+    background: var(--surface-light);
+    border-radius: 15px;
+    border-left: 4px solid var(--primary);
+}
+
+.performance-comment p {
+    color: var(--text-primary);
+    font-size: 1em;
+    font-weight: 500;
+}
+
+.action-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+/* 响应式设计 */
+@media (max-width: 480px) {
+    body {
+        padding: 10px;
+    }
+    
+    .container {
+        padding: 20px;
+    }
+    
+    .question {
+        font-size: 2em;
+    }
+    
+    .option {
+        padding: 15px;
+        font-size: 1.1em;
+        min-height: 70px;
+    }
+    
+    .options-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* 移除所有焦点轮廓 */
+*:focus {
+    outline: none !important;
+}
+
+button:focus {
+    outline: none !important;
+}
+
+.option:focus {
+    outline: none !important;
+    box-shadow: none !important;
+}

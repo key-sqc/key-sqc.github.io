@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数学挑战游戏</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 开始界面 -->
+    <div id="startScreen" class="screen active">
+        <div class="container">
+            <h1>🧮 数学挑战</h1>
+            <p class="subtitle">挑战你的数学极限！</p>
+            
+            <div class="input-group">
+                <label for="questionCount">题目数量：</label>
+                <input type="number" id="questionCount" min="5" max="20" value="10">
+            </div>
+            
+            <div class="input-group">
+                <label for="timerDuration">每题时间（秒）：</label>
+                <select id="timerDuration">
+                    <option value="5">5秒 - 困难</option>
+                    <option value="8" selected>8秒 - 普通</option>
+                    <option value="12">12秒 - 简单</option>
+                </select>
+            </div>
+            
+            <button id="startBtn" class="btn-primary">开始挑战</button>
+        </div>
+    </div>
+
+    <!-- 游戏界面 -->
+    <div id="gameScreen" class="screen">
+        <div class="game-background" id="gameBackground"></div>
+        
+        <!-- 粒子效果容器 -->
+        <div class="particles-container" id="particlesContainer"></div>
+        
+        <!-- 连击显示 -->
+        <div class="combo-display" id="comboDisplay">
+            <div class="combo-text">连击</div>
+            <div class="combo-count">x1</div>
+        </div>
+        
+        <div class="game-content">
+            <div class="game-header">
+                <div class="stats">
+                    <span id="progress">题目 1/10</span>
+                    <span id="score">得分: 0</span>
+                </div>
+                <div class="timer-container">
+                    <div id="timerBar" class="timer-bar"></div>
+                </div>
+            </div>
+            
+            <div class="question-container">
+                <div id="question" class="question">15 + 27 = ?</div>
+                <div class="question-hint" id="questionHint"></div>
+            </div>
+            
+            <div class="options-container">
+                <div class="option" data-index="0">
+                    <span class="option-text">42</span>
+                    <div class="option-effect"></div>
+                </div>
+                <div class="option" data-index="1">
+                    <span class="option-text">38</span>
+                    <div class="option-effect"></div>
+                </div>
+                <div class="option" data-index="2">
+                    <span class="option-text">45</span>
+                    <div class="option-effect"></div>
+                </div>
+                <div class="option" data-index="3">
+                    <span class="option-text">32</span>
+                    <div class="option-effect"></div>
+                </div>
+            </div>
+
+            <!-- 得分弹出 -->
+            <div class="score-popup" id="scorePopup">+100</div>
+            
+            <div class="feedback-container">
+                <div class="feedback" id="feedback">
+                    <div class="feedback-text">准备开始！</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 结束界面 -->
+    <div id="endScreen" class="screen">
+        <div class="container">
+            <div class="result-header">
+                <h2>挑战完成！</h2>
+                <div class="final-score" id="finalScoreDisplay">0</div>
+            </div>
+            
+            <div class="results">
+                <div class="result-item">
+                    <span>正确题目：</span>
+                    <span id="correctCount">0/0</span>
+                </div>
+                <div class="result-item">
+                    <span>最大连击：</span>
+                    <span id="maxCombo">0</span>
+                </div>
+                <div class="result-item">
+                    <span>准确率：</span>
+                    <span id="accuracy">0%</span>
+                </div>
+            </div>
+            
+            <div class="performance-comment">
+                <p id="performanceText">继续努力！</p>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="restartBtn" class="btn-primary">再玩一次</button>
+                <button id="mainMenuBtn" class="btn-secondary">返回主页</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
