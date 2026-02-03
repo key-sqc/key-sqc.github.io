@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>明亮打卡（离线优先版）</title>
+    <!-- 引入CSS样式文件 -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部连续打卡 -->
+        <div class="card top-card">
+            <div class="date" id="currentDate"></div>
+            <div class="streak" id="streakNum">0</div>
+            <div class="streak-text">连续打卡天数</div>
+        </div>
+
+        <!-- 任务列表 -->
+        <div class="card">
+            <div class="task-item">
+                <div class="task-left">
+                    <div class="task-icon" style="background-color: #e8f4f8; color: #38b2ac;">📚</div>
+                    <div>
+                        <div class="task-title">读书</div>
+                        <div class="task-status" id="status-read">待完成</div>
+                    </div>
+                </div>
+                <button class="task-btn" id="btn-read">打卡</button>
+            </div>
+            <div class="task-item">
+                <div class="task-left">
+                    <div class="task-icon" style="background-color: #fef7fb; color: #ed8936;">💪</div>
+                    <div>
+                        <div class="task-title">运动</div>
+                        <div class="task-status" id="status-sport">待完成</div>
+                    </div>
+                </div>
+                <button class="task-btn" id="btn-sport">打卡</button>
+            </div>
+            <div class="task-item">
+                <div class="task-left">
+                    <div class="task-icon" style="background-color: #f0f8fb; color: #4299e1;">💧</div>
+                    <div>
+                        <div class="task-title">喝水</div>
+                        <div class="task-status" id="status-water">待完成</div>
+                    </div>
+                </div>
+                <button class="task-btn" id="btn-water">打卡</button>
+            </div>
+
+            <!-- 今日进度 -->
+            <div class="progress-wrap">
+                <div class="progress-header">
+                    <span>今日进度</span>
+                    <span id="progress-text">0/3</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 月度统计 -->
+        <div class="card">
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-number" id="month-full">0</div>
+                    <div class="stat-text">本月全勤</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="month-count">0</div>
+                    <div class="stat-text">本月打卡</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-number" id="month-rate">0%</div>
+                    <div class="stat-text">完成率</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 底部一键打卡+补签+同步按钮 -->
+    <div class="fixed-btn-wrap">
+        <button class="btn-all" id="btn-all">✨ 一键全打卡</button>
+        <div class="supplement-link" id="supplement-wrap" style="display: none;">
+            <a href="javascript:;" id="supplement-link">补签昨日</a>
+        </div>
+        <button class="btn-sync" id="btn-sync" onclick="manualSync()">📤 手动同步本地数据</button>
+    </div>
+
+    <!-- 提示弹窗 & 离线提示 -->
+    <div class="toast" id="toast"></div>
+    <div class="offline-tip" id="offlineTip" style="display: none; opacity: 0;">当前离线，数据暂存本地</div>
+
+    <!-- 引入JS逻辑文件 -->
+    <script src="script.js"></script>
+</body>
+</html>
