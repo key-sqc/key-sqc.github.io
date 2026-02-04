@@ -1,7 +1,7 @@
 /**
- * 智能打卡助手 - 最终优化版
- * 核心优化：1. 本地数据优先渲染，云端检查后置 2. 点击按钮实时更新UI 3. 无感知加载
- * 版本：1.0.9
+ * 智能打卡助手 - 最终稳定版
+ * 核心逻辑：1. 本地优先存储 2. 连网自动同步历史+新数据 3. 断网恢复自动同步 4. 手动同步兜底
+ * 版本：1.0.13
  */
 (function(window, document) {
     'use strict';
@@ -22,7 +22,8 @@
         TASK_TOTAL: 3,
         OFFLINE_TIP_DURATION: 3000,
         TOAST_DURATION: 2000,
-        LOADING_TIMEOUT: 300 // 超过300ms才显示加载动画
+        LOADING_TIMEOUT: 300,
+        SYNC_DELAY: 500 // 延迟同步避免阻塞UI
     };
 
     const Utils = {
@@ -58,11 +59,10 @@
         }
     };
 
-    // 本地存储：单次读取+缓存
     const Storage = {
         _cache: null,
         getRecords() {
-            if (this._cache) return [...this._cache]; // 返回副本避免污染缓存
+            if (this._cache) return [...this._cache];
             try {
                 const key = `${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`;
                 const data = localStorage.getItem(key);
@@ -113,8 +113,9 @@
         todayDate: '',
         yesterdayDate: '',
         completedCount: 0,
-        isOnline: false, // 默认离线
+        isOnline: false,
         loadingTimer: null,
+        hasInitedSync: false, // 标记初始化同步是否完成
 
         async init() {
             const startTime = Date.now();
@@ -122,41 +123,48 @@
             this.todayDate = Utils.formatDate(today);
             this.yesterdayDate = Utils.formatDate(new Date(today - 86400000));
             
-            // 1. 优先渲染静态日期，避免页面空白
+            // 优先渲染日期
             const dateEl = Utils.getDom('#currentDate');
             dateEl && (dateEl.textContent = Utils.formatShowDate(today));
             
-            // 2. 启动加载超时兜底
+            // 加载兜底定时器
             this.loadingTimer = setTimeout(() => {
                 Utils.showLoading();
             }, CONST.LOADING_TIMEOUT);
 
-            // 3. 本地数据优先读取+渲染，不等待云端
+            // 本地数据优先渲染，不等待云端
             const records = Storage.getRecords();
             this.renderBasicUI(records);
             this.renderComplexStats(records);
-
-            // 4. 立即绑定核心事件，用户可直接操作
             this.bindEvents();
 
-            // 5. 后台异步检查云端，不阻塞UI
+            // 异步检测云端连接
             this.checkBackendConn().then(isOnline => {
                 this.isOnline = isOnline;
-                this.checkNetworkStatus(); // 绑定网络状态监听
-                this.isOnline && Utils.showToast('已连接云端，可同步数据');
+                this.checkNetworkStatus();
+                // 连网则一次性同步历史未同步数据
+                if (this.isOnline && !this.hasInitedSync) {
+                    Utils.showToast('已连接云端，自动同步历史数据');
+                    this.autoSync();
+                    this.hasInitedSync = true;
+                } else if (this.isOnline) {
+                    Utils.showToast('云端已连接，打卡将自动同步');
+                } else {
+                    Utils.showToast('云端未连接，仅本地模式');
+                }
             }).catch(() => {
                 this.isOnline = false;
                 Utils.showToast('云端未连接，仅本地模式');
             });
 
-            // 6. 立即隐藏加载动画（本地渲染完成）
+            // 立即隐藏加载动画
             clearTimeout(this.loadingTimer);
             Utils.hideLoading();
 
             Utils.log('log', `初始化完成，耗时 ${Date.now() - startTime}ms`);
         },
 
-        // 渲染基础UI：任务状态+进度条（最快响应）
+        // 渲染基础UI：任务状态+进度条
         renderBasicUI(records) {
             const todayDoneTasks = records
                 .filter(r => !r.isSupplement && r.date === this.todayDate)
@@ -183,7 +191,7 @@
             // 更新一键打卡按钮状态
             this.updateAllBtnStatus();
 
-            // 检查补签按钮显示状态
+            // 控制补签按钮显示
             const hasYesterdayFull = records.some(r => 
                 (r.date === this.yesterdayDate && !r.isSupplement && records.filter(x => x.date === this.yesterdayDate).length === CONST.TASK_TOTAL) ||
                 (r.targetDate === this.yesterdayDate && r.isSupplement)
@@ -192,7 +200,7 @@
             if (supplementWrap) supplementWrap.style.display = hasYesterdayFull ? 'none' : 'block';
         },
 
-        // 异步渲染复杂统计：连续天数+月度数据（不阻塞基础UI）
+        // 异步渲染复杂统计：连续天数+月度数据
         renderComplexStats(records) {
             setTimeout(() => {
                 const stats = this.calculateStats(records);
@@ -208,7 +216,7 @@
             }, 0);
         },
 
-        // 统计计算逻辑
+        // 统计计算核心逻辑
         calculateStats(records) {
             const normalRecords = records.filter(r => !r.isSupplement);
             const supplementRecords = records.filter(r => r.isSupplement);
@@ -261,7 +269,7 @@
             return { streak, monthFullDays, monthTotalCount, monthRate };
         },
 
-        // 异步检查云端连接
+        // 检测云端连接状态
         checkBackendConn() {
             return new Promise((resolve) => {
                 fetch(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, {
@@ -271,16 +279,26 @@
             });
         },
 
-        // 网络状态监听
+        // 监听网络状态变化
         checkNetworkStatus() {
+            // 网络恢复：自动同步+切换模式
             window.addEventListener('online', () => {
                 this.isOnline = true;
                 const offlineTip = Utils.getDom('#offlineTip');
                 offlineTip && (offlineTip.style.display = 'none');
-                Utils.showToast('网络已恢复，自动同步中...');
-                setTimeout(() => this.autoSync(), 1000); // 后台同步
+                // 未执行过初始化同步则同步历史数据，否则仅提示
+                if (!this.hasInitedSync) {
+                    Utils.showToast('网络恢复，自动同步本地数据');
+                    this.autoSync();
+                    this.hasInitedSync = true;
+                } else {
+                    Utils.showToast('网络恢复，打卡将自动同步');
+                    // 额外同步一次断网期间的新数据
+                    this.autoSync();
+                }
             });
 
+            // 网络断开：切换本地模式
             window.addEventListener('offline', () => {
                 this.isOnline = false;
                 const offlineTip = Utils.getDom('#offlineTip');
@@ -292,15 +310,18 @@
                         setTimeout(() => offlineTip.style.display = 'none', 300);
                     }, CONST.OFFLINE_TIP_DURATION);
                 }
-                Utils.showToast('已切换至本地模式，数据不会同步');
+                Utils.showToast('网络断开，仅本地存储');
             });
         },
 
-        // 后台同步数据
+        // 自动同步核心方法
         autoSync() {
             if (!this.isOnline) return;
             const records = Storage.getRecords().filter(r => !r.isSynced);
-            if (!records.length) return;
+            if (!records.length) {
+                Utils.showToast('本地数据已全部同步');
+                return;
+            }
 
             let successCount = 0;
             records.forEach(async record => {
@@ -327,12 +348,17 @@
                 }
             });
 
-            if (successCount > 0) {
-                Utils.showToast(`成功同步 ${successCount} 条数据`);
-            }
+            // 同步结果提示
+            setTimeout(() => {
+                if (successCount > 0) {
+                    Utils.showToast(`成功同步 ${successCount}/${records.length} 条数据`);
+                } else {
+                    Utils.showToast('部分数据同步失败，请稍后重试');
+                }
+            }, 1000);
         },
 
-        // 手动同步触发
+        // 手动同步触发方法
         manualSync() {
             if (this.isOnline) {
                 this.autoSync();
@@ -341,12 +367,12 @@
             }
         },
 
-        // 单个任务打卡（实时更新UI）
+        // 单个任务打卡逻辑
         singleCheckin(taskId) {
             const task = CONST.TASKS.find(t => t.id === taskId);
             if (!task) return;
 
-            // 保存打卡记录
+            // 保存本地记录
             const recordId = `${CONST.USERNAME}_${task.id}_${this.todayDate}_${Date.now()}`;
             Storage.saveRecord({
                 id: recordId,
@@ -355,13 +381,13 @@
                 isSupplement: false
             });
 
-            // 立即更新按钮和状态
+            // 更新按钮和状态
             const btn = Utils.getDom(`#btn-${taskId}`);
             const status = Utils.getDom(`#status-${taskId}`);
             btn && btn.classList.add('done');
             status && (status.textContent = '已完成');
 
-            // 更新完成数和进度条
+            // 更新进度
             this.completedCount++;
             const progress = Math.round((this.completedCount / CONST.TASK_TOTAL) * 100);
             const progressFill = Utils.getDom('#progress-fill');
@@ -369,7 +395,7 @@
             progressFill && (progressFill.style.width = `${progress}%`);
             progressText && (progressText.textContent = `${this.completedCount}/${CONST.TASK_TOTAL}`);
 
-            // 更新一键打卡按钮状态
+            // 更新一键打卡按钮
             this.updateAllBtnStatus();
 
             // 重新计算统计数据
@@ -379,11 +405,13 @@
             // 提示用户
             Utils.showToast(`✅ ${task.name}打卡成功`);
 
-            // 后台同步（如果在线）
-            this.isOnline && setTimeout(() => this.autoSync(), 1000);
+            // 连网状态下自动同步新数据
+            if (this.isOnline) {
+                setTimeout(() => this.autoSync(), CONST.SYNC_DELAY);
+            }
         },
 
-        // 一键打卡（批量触发单个打卡）
+        // 一键打卡逻辑
         batchCheckin() {
             if (this.completedCount >= CONST.TASK_TOTAL) {
                 Utils.showToast('今日任务已全部完成');
@@ -398,7 +426,7 @@
             });
         },
 
-        // 补签昨日任务（实时更新统计）
+        // 补签昨日任务逻辑
         supplementCheckin() {
             Storage.saveSupplementRecords(this.yesterdayDate);
             
@@ -406,15 +434,17 @@
             const supplementWrap = Utils.getDom('#supplement-wrap');
             supplementWrap && (supplementWrap.style.display = 'none');
 
-            // 重新计算统计数据
+            // 重新计算统计
             const records = Storage.getRecords();
             this.renderComplexStats(records);
 
             // 提示用户
             Utils.showToast('✅ 补签成功！昨日3个任务已全部打卡');
 
-            // 后台同步（如果在线）
-            this.isOnline && setTimeout(() => this.autoSync(), 1000);
+            // 连网状态下自动同步补签数据
+            if (this.isOnline) {
+                setTimeout(() => this.autoSync(), CONST.SYNC_DELAY);
+            }
         },
 
         // 更新一键打卡按钮状态
@@ -430,7 +460,7 @@
             }
         },
 
-        // 绑定所有事件
+        // 绑定所有页面事件
         bindEvents() {
             // 单个任务打卡事件
             CONST.TASKS.forEach(task => {
@@ -455,7 +485,7 @@
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', () => Checkin.init());
 
-    // 暴露全局方法（方便调试）
+    // 暴露全局方法供调试
     window.Checkin = Checkin;
     window.Utils = Utils;
 })(window, document);
