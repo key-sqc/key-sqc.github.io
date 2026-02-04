@@ -4,19 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>明亮打卡（离线优先版）</title>
-    <!-- 引入CSS样式文件 -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
-        <!-- 顶部连续打卡 -->
+    <!-- 加载动画默认隐藏，仅数据处理超时时显示 -->
+    <div class="loading-wrap" id="loadingWrap" style="display: none;">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p>加载打卡记录中...</p>
+        </div>
+    </div>
+
+    <div class="container" id="appContainer">
+        <!-- 原内容完全不变 -->
         <div class="card top-card">
             <div class="date" id="currentDate"></div>
             <div class="streak" id="streakNum">0</div>
             <div class="streak-text">连续打卡天数</div>
         </div>
-
-        <!-- 任务列表 -->
         <div class="card">
             <div class="task-item">
                 <div class="task-left">
@@ -48,8 +53,6 @@
                 </div>
                 <button class="task-btn" id="btn-water">打卡</button>
             </div>
-
-            <!-- 今日进度 -->
             <div class="progress-wrap">
                 <div class="progress-header">
                     <span>今日进度</span>
@@ -60,8 +63,6 @@
                 </div>
             </div>
         </div>
-
-        <!-- 月度统计 -->
         <div class="card">
             <div class="stats">
                 <div class="stat-item">
@@ -79,21 +80,15 @@
             </div>
         </div>
     </div>
-
-    <!-- 底部一键打卡+补签+同步按钮 -->
-    <div class="fixed-btn-wrap">
+    <div class="fixed-btn-wrap" id="fixedBtnWrap">
         <button class="btn-all" id="btn-all">✨ 一键全打卡</button>
         <div class="supplement-link" id="supplement-wrap" style="display: none;">
             <a href="javascript:;" id="supplement-link">补签昨日</a>
         </div>
         <button class="btn-sync" id="btn-sync" onclick="manualSync()">📤 手动同步本地数据</button>
     </div>
-
-    <!-- 提示弹窗 & 离线提示 -->
     <div class="toast" id="toast"></div>
     <div class="offline-tip" id="offlineTip" style="display: none; opacity: 0;">当前离线，数据暂存本地</div>
-
-    <!-- 引入JS逻辑文件 -->
     <script src="script.js"></script>
 </body>
 </html>
