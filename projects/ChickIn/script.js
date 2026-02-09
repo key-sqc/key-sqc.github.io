@@ -1,7 +1,7 @@
 /**
- * 智能打卡助手 - 修复手机端同步状态问题
- * 版本：1.0.18
- * 修复点：1. 实时更新isOnline状态 2. 手动同步实时检测后端 3. 取消Pages环境强制离线
+ * 智能打卡助手 - 修复数据库删除后同步失败
+ * 版本：1.0.19
+ * 修复点：1. 同步失败自动重试 2. 清除无效同步状态 3. 优化后端错误反馈 4. 数据库重建后强制同步
  */
 (function(window, document) {
     'use strict';
@@ -20,10 +20,11 @@
             { id: 'water', name: '喝水' }
         ],
         OFFLINE_TIP_DURATION: 3000,
-        TOAST_DURATION: 2000,
+        TOAST_DURATION: 2500, // 延长提示时间
         LOADING_TIMEOUT: 800,
         SYNC_DELAY: 500,
-        FETCH_TIMEOUT: 5000
+        FETCH_TIMEOUT: 8000, // 延长请求超时时间
+        SYNC_RETRY_COUNT: 2 // 同步失败重试次数
     };
     CONST.TASK_TOTAL = CONST.TASKS.length;
 
@@ -143,6 +144,12 @@
             if (index === -1) return;
             this._cache[index].isSynced = true;
             this._setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
+        },
+        // 新增：清除所有同步状态（数据库删除后调用）
+        clearAllSyncStatus() {
+            this._cache.forEach(record => record.isSynced = false);
+            this._setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
+            Utils.showToast('已重置同步状态，将重新同步所有数据');
         }
     };
 
@@ -179,11 +186,15 @@
             }, CONST.LOADING_TIMEOUT);
 
             try {
-                // 实时检测后端连接（不强制Pages环境离线）
                 this.isOnline = await this.checkBackendConn();
                 this.checkNetworkStatus();
 
+                // 数据库删除后，首次同步失败时自动重置同步状态
                 if (this.isOnline && !this.hasInitedSync) {
+                    const testRes = await Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`);
+                    if (!testRes.ok) {
+                        Storage.clearAllSyncStatus();
+                    }
                     Utils.showToast('已连接云端，自动同步历史数据');
                     await this.autoSync();
                     this.hasInitedSync = true;
@@ -315,7 +326,7 @@
 
         checkNetworkStatus() {
             window.addEventListener('online', () => {
-                this.isOnline = true; // 实时更新在线状态
+                this.isOnline = true;
                 const offlineTip = Utils.getDom('#offlineTip');
                 offlineTip && (offlineTip.style.display = 'none');
                 if (!this.hasInitedSync) {
@@ -329,7 +340,7 @@
             });
 
             window.addEventListener('offline', () => {
-                this.isOnline = false; // 实时更新离线状态
+                this.isOnline = false;
                 const offlineTip = Utils.getDom('#offlineTip');
                 if (offlineTip) {
                     offlineTip.style.display = 'block';
@@ -343,46 +354,70 @@
             });
         },
 
+        // 新增：单个记录同步（支持重试）
+        async syncSingleRecord(record, retryCount = 0) {
+            const url = record.isSupplement 
+                ? `${ENV.BASE_URL}/checkin/supplement` 
+                : `${ENV.BASE_URL}/checkin`;
+            try {
+                const res = await Utils.fetchWithTimeout(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: CONST.USERNAME,
+                        content: record.content,
+                        date: record.date,
+                        targetDate: record.targetDate
+                    })
+                });
+                const result = await res.json();
+                if (res.ok && result.success) {
+                    Storage.updateSyncStatus(record.id);
+                    return true;
+                } else {
+                    // 后端返回错误（如集合不存在），重试
+                    if (retryCount < CONST.SYNC_RETRY_COUNT) {
+                        Utils.log('warn', `同步重试 ${retryCount+1} 次: ${record.content}`);
+                        return this.syncSingleRecord(record, retryCount + 1);
+                    } else {
+                        Utils.log('error', `同步失败（后端错误）: ${JSON.stringify(result)}`);
+                        Utils.showToast(`同步失败：${result.message || '后端服务异常'}`);
+                        return false;
+                    }
+                }
+            } catch (e) {
+                // 网络异常，重试
+                if (retryCount < CONST.SYNC_RETRY_COUNT) {
+                    Utils.log('warn', `同步重试 ${retryCount+1} 次（网络异常）: ${record.content}`);
+                    return this.syncSingleRecord(record, retryCount + 1);
+                } else {
+                    Utils.log('error', `同步失败（网络异常）: ${e.message}`);
+                    return false;
+                }
+            }
+        },
+
         async autoSync() {
             if (!this.isOnline || this.isSyncing) return;
             this.isSyncing = true;
-            const records = Storage.getRecords().filter(r => !r.isSynced && r.username === CONST.USERNAME);
+            // 数据库删除后，强制同步所有本地记录（不管之前是否标记为已同步）
+            const records = Storage.getRecords().filter(r => r.username === CONST.USERNAME);
             if (!records.length) {
-                Utils.showToast('本地数据已全部同步');
+                Utils.showToast('无本地数据可同步');
                 this.isSyncing = false;
                 return;
             }
 
             let successCount = 0;
             for (const record of records) {
-                const url = record.isSupplement 
-                    ? `${ENV.BASE_URL}/checkin/supplement` 
-                    : `${ENV.BASE_URL}/checkin`;
-                try {
-                    const res = await Utils.fetchWithTimeout(url, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            username: CONST.USERNAME,
-                            content: record.content,
-                            date: record.date,
-                            targetDate: record.targetDate
-                        })
-                    });
-                    const result = await res.json();
-                    if (res.ok && result.success) {
-                        successCount++;
-                        Storage.updateSyncStatus(record.id);
-                    }
-                } catch (e) {
-                    Utils.log('error', `同步失败[${record.content}]: ${e.message}`);
-                }
+                const isSuccess = await this.syncSingleRecord(record);
+                if (isSuccess) successCount++;
             }
 
             if (successCount > 0) {
                 Utils.showToast(`成功同步 ${successCount}/${records.length} 条数据`);
             } else {
-                Utils.showToast('所有数据同步失败，请稍后重试');
+                Utils.showToast('所有数据同步失败，请检查后端服务');
             }
             this.renderBasicUI(Storage.getRecords(true));
             this.renderComplexStats(Storage.getRecords(true));
@@ -390,11 +425,13 @@
         },
 
         manualSync() {
-            // 手动同步时实时检测后端连接
+            // 手动同步时，先检测后端是否正常
             this.checkBackendConn().then((isRealOnline) => {
                 if (isRealOnline) {
                     this.isOnline = true;
                     Utils.showLoading();
+                    // 数据库删除后，手动同步强制重置所有同步状态
+                    Storage.clearAllSyncStatus();
                     this.autoSync().finally(() => {
                         Utils.hideLoading();
                     });
