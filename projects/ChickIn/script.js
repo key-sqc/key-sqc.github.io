@@ -314,11 +314,18 @@
 
         checkBackendConn() {
             return new Promise((resolve) => {
+                // 直接请求后端接口，成功则标记为在线
                 Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, { method: 'GET' })
                     .then(res => resolve(res.ok))
-                    .catch(() => resolve(false));
+                    .catch(() => {
+                        // 即使请求失败，再重试1次（避免偶发网络波动）
+                        Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, { method: 'GET' })
+                            .then(res => resolve(res.ok))
+                            .catch(() => resolve(false));
+                    });
             });
         },
+
 
         checkNetworkStatus() {
             window.addEventListener('online', () => {
