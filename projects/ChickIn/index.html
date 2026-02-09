@@ -85,7 +85,8 @@
         <div class="supplement-link" id="supplement-wrap" style="display: none;">
             <a href="javascript:;" id="supplement-link">补签昨日</a>
         </div>
-        <button class="btn-sync" id="btn-sync" onclick="manualSync()">📤 手动同步本地数据</button>
+        <!-- 修复：调用全局暴露的Checkin.manualSync -->
+        <button class="btn-sync" id="btn-sync" onclick="Checkin.manualSync()">📤 手动同步本地数据</button>
     </div>
     <div class="toast" id="toast"></div>
     <div class="offline-tip" id="offlineTip" style="display: none; opacity: 0;">当前离线，数据暂存本地</div>

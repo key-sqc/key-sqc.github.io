@@ -1,7 +1,6 @@
 /**
- * 智能打卡助手 - 最终稳定版
- * 核心逻辑：1. 本地优先存储 2. 连网自动同步历史+新数据 3. 断网恢复自动同步 4. 手动同步兜底
- * 版本：1.0.13
+ * 智能打卡助手 - 稳定版
+ * 版本：1.0.16
  */
 (function(window, document) {
     'use strict';
@@ -19,12 +18,13 @@
             { id: 'sport', name: '运动' },
             { id: 'water', name: '喝水' }
         ],
-        TASK_TOTAL: 3,
         OFFLINE_TIP_DURATION: 3000,
         TOAST_DURATION: 2000,
-        LOADING_TIMEOUT: 300,
-        SYNC_DELAY: 500 // 延迟同步避免阻塞UI
+        LOADING_TIMEOUT: 800,
+        SYNC_DELAY: 500,
+        FETCH_TIMEOUT: 5000
     };
+    CONST.TASK_TOTAL = CONST.TASKS.length;
 
     const Utils = {
         log(type, message) {
@@ -56,12 +56,31 @@
         hideLoading() {
             const loading = this.getDom('#loadingWrap');
             loading && (loading.style.display = 'none');
+        },
+        fetchWithTimeout(url, options = {}) {
+            return new Promise((resolve, reject) => {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => {
+                    controller.abort();
+                    reject(new Error('请求超时'));
+                }, CONST.FETCH_TIMEOUT);
+                fetch(url, { ...options, signal: controller.signal })
+                    .then(res => {
+                        clearTimeout(timeoutId);
+                        resolve(res);
+                    })
+                    .catch(err => {
+                        clearTimeout(timeoutId);
+                        reject(err);
+                    });
+            });
         }
     };
 
     const Storage = {
         _cache: null,
-        getRecords() {
+        getRecords(forceRefresh = false) {
+            if (forceRefresh) this._cache = null;
             if (this._cache) return [...this._cache];
             try {
                 const key = `${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`;
@@ -79,21 +98,38 @@
             if (!completeRecord.id || !completeRecord.content || !completeRecord.date) return;
             
             const isDuplicate = this.getRecords().some(r => 
-                r.content === completeRecord.content && r.date === completeRecord.date && r.isSupplement === completeRecord.isSupplement
+                r.username === CONST.USERNAME &&
+                r.content === completeRecord.content && 
+                r.date === completeRecord.date && 
+                r.isSupplement === completeRecord.isSupplement &&
+                r.targetDate === completeRecord.targetDate
             );
             if (isDuplicate) return;
 
             this._cache.push(completeRecord);
-            localStorage.setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
+            this._setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
+        },
+        _setItem(key, value) {
+            try {
+                localStorage.setItem(key, value);
+                return true;
+            } catch (e) {
+                Utils.log('error', '存储溢出：', e);
+                Utils.showToast('本地存储已满，无法保存新记录');
+                return false;
+            }
         },
         saveSupplementRecords(targetDate) {
-            const hasSupplement = this.getRecords().some(r => r.isSupplement && r.targetDate === targetDate);
+            const hasSupplement = this.getRecords().some(r => 
+                r.username === CONST.USERNAME && r.isSupplement && r.targetDate === targetDate
+            );
             if (hasSupplement) return;
 
             CONST.TASKS.forEach(task => {
                 const recordId = `${CONST.USERNAME}_supplement_${task.id}_${targetDate}_${Date.now()}`;
                 this.saveRecord({
                     id: recordId,
+                    username: CONST.USERNAME,
                     content: task.name,
                     date: Utils.formatDate(new Date()),
                     targetDate: targetDate,
@@ -105,7 +141,7 @@
             const index = this._cache.findIndex(r => r.id === recordId);
             if (index === -1) return;
             this._cache[index].isSynced = true;
-            localStorage.setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
+            this._setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
         }
     };
 
@@ -115,7 +151,8 @@
         completedCount: 0,
         isOnline: false,
         loadingTimer: null,
-        hasInitedSync: false, // 标记初始化同步是否完成
+        hasInitedSync: false,
+        isSyncing: false,
 
         async init() {
             const startTime = Date.now();
@@ -123,84 +160,70 @@
             this.todayDate = Utils.formatDate(today);
             this.yesterdayDate = Utils.formatDate(new Date(today - 86400000));
             
-            // 优先渲染日期
             const dateEl = Utils.getDom('#currentDate');
             dateEl && (dateEl.textContent = Utils.formatShowDate(today));
             
-            // 加载兜底定时器
             this.loadingTimer = setTimeout(() => {
                 Utils.showLoading();
             }, CONST.LOADING_TIMEOUT);
 
-            // 本地数据优先渲染，不等待云端
             const records = Storage.getRecords();
             this.renderBasicUI(records);
             this.renderComplexStats(records);
             this.bindEvents();
 
-            // 异步检测云端连接
-            this.checkBackendConn().then(isOnline => {
-                this.isOnline = isOnline;
+            try {
+                this.isOnline = await this.checkBackendConn();
                 this.checkNetworkStatus();
-                // 连网则一次性同步历史未同步数据
                 if (this.isOnline && !this.hasInitedSync) {
                     Utils.showToast('已连接云端，自动同步历史数据');
-                    this.autoSync();
+                    await this.autoSync();
                     this.hasInitedSync = true;
                 } else if (this.isOnline) {
                     Utils.showToast('云端已连接，打卡将自动同步');
                 } else {
                     Utils.showToast('云端未连接，仅本地模式');
                 }
-            }).catch(() => {
+            } catch (e) {
                 this.isOnline = false;
+                Utils.log('error', '云端连接检测失败：', e);
                 Utils.showToast('云端未连接，仅本地模式');
-            });
-
-            // 立即隐藏加载动画
-            clearTimeout(this.loadingTimer);
-            Utils.hideLoading();
+            } finally {
+                clearTimeout(this.loadingTimer);
+                Utils.hideLoading();
+            }
 
             Utils.log('log', `初始化完成，耗时 ${Date.now() - startTime}ms`);
         },
 
-        // 渲染基础UI：任务状态+进度条
         renderBasicUI(records) {
             const todayDoneTasks = records
-                .filter(r => !r.isSupplement && r.date === this.todayDate)
+                .filter(r => !r.isSupplement && r.date === this.todayDate && r.username === CONST.USERNAME)
                 .map(r => r.content);
             
             this.completedCount = todayDoneTasks.length;
 
-            // 批量更新任务按钮和状态
             CONST.TASKS.forEach(task => {
                 const isDone = todayDoneTasks.includes(task.name);
                 const btn = Utils.getDom(`#btn-${task.id}`);
                 const status = Utils.getDom(`#status-${task.id}`);
-                if (btn) isDone ? btn.classList.add('done') : btn.classList.remove('done');
+                if (btn) {
+                    isDone ? btn.classList.add('done') : btn.classList.remove('done');
+                    btn.disabled = isDone;
+                }
                 if (status) status.textContent = isDone ? '已完成' : '待完成';
             });
 
-            // 更新进度条
             const progress = Math.round((this.completedCount / CONST.TASK_TOTAL) * 100);
             const progressFill = Utils.getDom('#progress-fill');
             const progressText = Utils.getDom('#progress-text');
             if (progressFill) progressFill.style.width = `${progress}%`;
             if (progressText) progressText.textContent = `${this.completedCount}/${CONST.TASK_TOTAL}`;
 
-            // 更新一键打卡按钮状态
             this.updateAllBtnStatus();
-
-            // 控制补签按钮显示
-            const hasYesterdayFull = records.some(r => 
-                (r.date === this.yesterdayDate && !r.isSupplement && records.filter(x => x.date === this.yesterdayDate).length === CONST.TASK_TOTAL) ||
-                (r.targetDate === this.yesterdayDate && r.isSupplement)
-            );
-            const supplementWrap = Utils.getDom('#supplement-wrap');
-            if (supplementWrap) supplementWrap.style.display = hasYesterdayFull ? 'none' : 'block';
+            this.judgeSupplementShow(records);
         },
 
-        // 异步渲染复杂统计：连续天数+月度数据
         renderComplexStats(records) {
             setTimeout(() => {
                 const stats = this.calculateStats(records);
@@ -216,37 +239,34 @@
             }, 0);
         },
 
-        // 统计计算核心逻辑
         calculateStats(records) {
-            const normalRecords = records.filter(r => !r.isSupplement);
-            const supplementRecords = records.filter(r => r.isSupplement);
+            const userRecords = records.filter(r => r.username === CONST.USERNAME);
+            const normalRecords = userRecords.filter(r => !r.isSupplement);
+            const supplementRecords = userRecords.filter(r => r.isSupplement);
             const allDates = [...new Set([...normalRecords.map(r => r.date), ...supplementRecords.map(r => r.targetDate)])].filter(Boolean);
 
-            // 计算全勤天数
             const fullDayDates = allDates.filter(date => {
-                const normalDone = records.filter(r => r.date === date && !r.isSupplement).length === CONST.TASK_TOTAL;
-                const supplementDone = records.some(r => r.targetDate === date && r.isSupplement);
+                const normalDone = normalRecords.filter(r => r.date === date).length === CONST.TASK_TOTAL;
+                const supplementDone = supplementRecords.some(r => r.targetDate === date);
                 return normalDone || supplementDone;
             });
 
-            // 计算连续打卡天数
             let streak = 0;
+            if (fullDayDates.length === 0) {
+                return { streak: 0, monthFullDays: 0, monthTotalCount: 0, monthRate: 0 };
+            }
             const sortedDates = fullDayDates.sort((a,b) => new Date(b) - new Date(a));
-            let lastDate = null;
-            for (const date of sortedDates) {
-                if (!lastDate) {
-                    lastDate = new Date(date);
-                    streak = 1;
-                } else {
-                    const diff = (lastDate - new Date(date)) / 86400000;
-                    if (diff === 1) {
-                        streak++;
-                        lastDate = new Date(date);
-                    } else break;
-                }
+            let lastDate = new Date(sortedDates[0]);
+            streak = 1;
+            for (let i = 1; i < sortedDates.length; i++) {
+                const currentDate = new Date(sortedDates[i]);
+                const diff = (lastDate - currentDate) / 86400000;
+                if (diff === 1) {
+                    streak++;
+                    lastDate = currentDate;
+                } else break;
             }
 
-            // 计算月度统计
             const now = new Date();
             const year = now.getFullYear();
             const month = now.getMonth() + 1;
@@ -269,36 +289,29 @@
             return { streak, monthFullDays, monthTotalCount, monthRate };
         },
 
-        // 检测云端连接状态
         checkBackendConn() {
             return new Promise((resolve) => {
-                fetch(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, {
-                    method: 'GET',
-                    timeout: 5000
-                }).then(res => resolve(res.ok)).catch(() => resolve(false));
+                Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, { method: 'GET' })
+                    .then(res => resolve(res.ok))
+                    .catch(() => resolve(false));
             });
         },
 
-        // 监听网络状态变化
         checkNetworkStatus() {
-            // 网络恢复：自动同步+切换模式
             window.addEventListener('online', () => {
                 this.isOnline = true;
                 const offlineTip = Utils.getDom('#offlineTip');
                 offlineTip && (offlineTip.style.display = 'none');
-                // 未执行过初始化同步则同步历史数据，否则仅提示
                 if (!this.hasInitedSync) {
                     Utils.showToast('网络恢复，自动同步本地数据');
                     this.autoSync();
                     this.hasInitedSync = true;
-                } else {
+                } else if (!this.isSyncing) {
                     Utils.showToast('网络恢复，打卡将自动同步');
-                    // 额外同步一次断网期间的新数据
                     this.autoSync();
                 }
             });
 
-            // 网络断开：切换本地模式
             window.addEventListener('offline', () => {
                 this.isOnline = false;
                 const offlineTip = Utils.getDom('#offlineTip');
@@ -314,22 +327,23 @@
             });
         },
 
-        // 自动同步核心方法
-        autoSync() {
-            if (!this.isOnline) return;
-            const records = Storage.getRecords().filter(r => !r.isSynced);
+        async autoSync() {
+            if (!this.isOnline || this.isSyncing) return;
+            this.isSyncing = true;
+            const records = Storage.getRecords().filter(r => !r.isSynced && r.username === CONST.USERNAME);
             if (!records.length) {
                 Utils.showToast('本地数据已全部同步');
+                this.isSyncing = false;
                 return;
             }
 
             let successCount = 0;
-            records.forEach(async record => {
+            for (const record of records) {
                 const url = record.isSupplement 
                     ? `${ENV.BASE_URL}/checkin/supplement` 
                     : `${ENV.BASE_URL}/checkin`;
                 try {
-                    const res = await fetch(url, {
+                    const res = await Utils.fetchWithTimeout(url, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -339,55 +353,57 @@
                             targetDate: record.targetDate
                         })
                     });
-                    if (res.ok) {
+                    const result = await res.json();
+                    if (res.ok && result.success) {
                         successCount++;
                         Storage.updateSyncStatus(record.id);
                     }
                 } catch (e) {
-                    Utils.log('error', `同步失败: ${e.message}`);
+                    Utils.log('error', `同步失败[${record.content}]: ${e.message}`);
                 }
-            });
+            }
 
-            // 同步结果提示
-            setTimeout(() => {
-                if (successCount > 0) {
-                    Utils.showToast(`成功同步 ${successCount}/${records.length} 条数据`);
-                } else {
-                    Utils.showToast('部分数据同步失败，请稍后重试');
-                }
-            }, 1000);
+            if (successCount > 0) {
+                Utils.showToast(`成功同步 ${successCount}/${records.length} 条数据`);
+            } else {
+                Utils.showToast('所有数据同步失败，请稍后重试');
+            }
+            this.renderBasicUI(Storage.getRecords(true));
+            this.renderComplexStats(Storage.getRecords(true));
+            this.isSyncing = false;
         },
 
-        // 手动同步触发方法
         manualSync() {
             if (this.isOnline) {
-                this.autoSync();
+                Utils.showLoading();
+                this.autoSync().finally(() => {
+                    Utils.hideLoading();
+                });
             } else {
                 Utils.showToast('当前离线，无法同步');
             }
         },
 
-        // 单个任务打卡逻辑
         singleCheckin(taskId) {
+            const btn = Utils.getDom(`#btn-${taskId}`);
+            if (btn && (btn.classList.contains('done') || btn.disabled)) return;
+            btn.disabled = true;
             const task = CONST.TASKS.find(t => t.id === taskId);
             if (!task) return;
 
-            // 保存本地记录
             const recordId = `${CONST.USERNAME}_${task.id}_${this.todayDate}_${Date.now()}`;
             Storage.saveRecord({
                 id: recordId,
+                username: CONST.USERNAME,
                 content: task.name,
                 date: this.todayDate,
                 isSupplement: false
             });
 
-            // 更新按钮和状态
-            const btn = Utils.getDom(`#btn-${taskId}`);
+            btn.classList.add('done');
             const status = Utils.getDom(`#status-${taskId}`);
-            btn && btn.classList.add('done');
             status && (status.textContent = '已完成');
 
-            // 更新进度
             this.completedCount++;
             const progress = Math.round((this.completedCount / CONST.TASK_TOTAL) * 100);
             const progressFill = Utils.getDom('#progress-fill');
@@ -395,23 +411,17 @@
             progressFill && (progressFill.style.width = `${progress}%`);
             progressText && (progressText.textContent = `${this.completedCount}/${CONST.TASK_TOTAL}`);
 
-            // 更新一键打卡按钮
             this.updateAllBtnStatus();
+            this.renderComplexStats(Storage.getRecords(true));
 
-            // 重新计算统计数据
-            const records = Storage.getRecords();
-            this.renderComplexStats(records);
-
-            // 提示用户
             Utils.showToast(`✅ ${task.name}打卡成功`);
+            setTimeout(() => btn.disabled = false, 800);
 
-            // 连网状态下自动同步新数据
-            if (this.isOnline) {
+            if (this.isOnline && !this.isSyncing) {
                 setTimeout(() => this.autoSync(), CONST.SYNC_DELAY);
             }
         },
 
-        // 一键打卡逻辑
         batchCheckin() {
             if (this.completedCount >= CONST.TASK_TOTAL) {
                 Utils.showToast('今日任务已全部完成');
@@ -426,66 +436,67 @@
             });
         },
 
-        // 补签昨日任务逻辑
         supplementCheckin() {
             Storage.saveSupplementRecords(this.yesterdayDate);
             
-            // 隐藏补签按钮
             const supplementWrap = Utils.getDom('#supplement-wrap');
             supplementWrap && (supplementWrap.style.display = 'none');
 
-            // 重新计算统计
-            const records = Storage.getRecords();
-            this.renderComplexStats(records);
+            this.renderComplexStats(Storage.getRecords(true));
+            Utils.showToast('✅ 补签成功！昨日任务已全部打卡');
 
-            // 提示用户
-            Utils.showToast('✅ 补签成功！昨日3个任务已全部打卡');
-
-            // 连网状态下自动同步补签数据
-            if (this.isOnline) {
+            if (this.isOnline && !this.isSyncing) {
                 setTimeout(() => this.autoSync(), CONST.SYNC_DELAY);
             }
         },
 
-        // 更新一键打卡按钮状态
         updateAllBtnStatus() {
             const allBtn = Utils.getDom('#btn-all');
             if (!allBtn) return;
             if (this.completedCount >= CONST.TASK_TOTAL) {
                 allBtn.textContent = '✅ 今日已打卡';
                 allBtn.classList.add('done');
+                allBtn.disabled = true;
             } else {
                 allBtn.textContent = '✨ 一键全打卡';
                 allBtn.classList.remove('done');
+                allBtn.disabled = false;
             }
         },
 
-        // 绑定所有页面事件
+        judgeSupplementShow(records) {
+            const supplementWrap = Utils.getDom('#supplement-wrap');
+            if (!supplementWrap) return;
+            const userRecords = records.filter(r => r.username === CONST.USERNAME);
+            
+            const yesterdayNormalDone = userRecords.filter(
+                r => !r.isSupplement && r.date === this.yesterdayDate
+            ).length === CONST.TASK_TOTAL;
+            const yesterdayHasSupplement = userRecords.some(
+                r => r.isSupplement && r.targetDate === this.yesterdayDate
+            );
+            const needSupplement = !yesterdayNormalDone && !yesterdayHasSupplement;
+            supplementWrap.style.display = needSupplement ? 'block' : 'none';
+        },
+
         bindEvents() {
-            // 单个任务打卡事件
             CONST.TASKS.forEach(task => {
                 const btn = Utils.getDom(`#btn-${task.id}`);
                 btn && btn.addEventListener('click', () => this.singleCheckin(task.id));
             });
 
-            // 一键打卡事件
             const allBtn = Utils.getDom('#btn-all');
             allBtn && allBtn.addEventListener('click', () => this.batchCheckin());
 
-            // 补签事件
             const supplementLink = Utils.getDom('#supplement-link');
             supplementLink && supplementLink.addEventListener('click', () => this.supplementCheckin());
 
-            // 手动同步事件
             const syncBtn = Utils.getDom('#btn-sync');
             syncBtn && syncBtn.addEventListener('click', () => this.manualSync());
         }
     };
 
-    // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', () => Checkin.init());
-
-    // 暴露全局方法供调试
     window.Checkin = Checkin;
     window.Utils = Utils;
 })(window, document);
