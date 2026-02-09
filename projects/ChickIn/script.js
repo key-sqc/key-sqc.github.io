@@ -1,7 +1,6 @@
 /**
- * 智能打卡助手 - 修复数据库删除后同步失败
- * 版本：1.0.19
- * 修复点：1. 同步失败自动重试 2. 清除无效同步状态 3. 优化后端错误反馈 4. 数据库重建后强制同步
+ * 智能打卡助手 - 修复重复同步唯一索引冲突
+ * 版本：1.0.20
  */
 (function(window, document) {
     'use strict';
@@ -20,11 +19,11 @@
             { id: 'water', name: '喝水' }
         ],
         OFFLINE_TIP_DURATION: 3000,
-        TOAST_DURATION: 2500, // 延长提示时间
+        TOAST_DURATION: 2500,
         LOADING_TIMEOUT: 800,
         SYNC_DELAY: 500,
-        FETCH_TIMEOUT: 8000, // 延长请求超时时间
-        SYNC_RETRY_COUNT: 2 // 同步失败重试次数
+        FETCH_TIMEOUT: 8000,
+        SYNC_RETRY_COUNT: 2
     };
     CONST.TASK_TOTAL = CONST.TASKS.length;
 
@@ -145,7 +144,6 @@
             this._cache[index].isSynced = true;
             this._setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
         },
-        // 新增：清除所有同步状态（数据库删除后调用）
         clearAllSyncStatus() {
             this._cache.forEach(record => record.isSynced = false);
             this._setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
@@ -189,7 +187,6 @@
                 this.isOnline = await this.checkBackendConn();
                 this.checkNetworkStatus();
 
-                // 数据库删除后，首次同步失败时自动重置同步状态
                 if (this.isOnline && !this.hasInitedSync) {
                     const testRes = await Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`);
                     if (!testRes.ok) {
@@ -316,7 +313,6 @@
                 Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, { method: 'GET' })
                     .then(res => resolve(res.ok))
                     .catch(() => {
-                        // 重试1次避免偶发波动
                         Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, { method: 'GET' })
                             .then(res => resolve(res.ok))
                             .catch(() => resolve(false));
@@ -354,11 +350,36 @@
             });
         },
 
-        // 新增：单个记录同步（支持重试）
-        async syncSingleRecord(record, retryCount = 0) {
+        // 修复：同步前先检查记录是否存在，避免重复键错误
+        async syncSingleRecord(record) {
             const url = record.isSupplement 
                 ? `${ENV.BASE_URL}/checkin/supplement` 
                 : `${ENV.BASE_URL}/checkin`;
+            
+            // 步骤1：检查后端是否已存在该记录
+            try {
+                const checkRes = await Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkin/exists`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: CONST.USERNAME,
+                        content: record.content,
+                        date: record.date,
+                        isSupplement: record.isSupplement,
+                        targetDate: record.targetDate
+                    })
+                });
+                const checkResult = await checkRes.json();
+                if (checkResult.exists) {
+                    // 记录已存在，标记为已同步
+                    Storage.updateSyncStatus(record.id);
+                    return true;
+                }
+            } catch (e) {
+                Utils.log('warn', `检查记录存在失败: ${e.message}`);
+            }
+
+            // 步骤2：记录不存在，执行同步
             try {
                 const res = await Utils.fetchWithTimeout(url, {
                     method: 'POST',
@@ -375,32 +396,19 @@
                     Storage.updateSyncStatus(record.id);
                     return true;
                 } else {
-                    // 后端返回错误（如集合不存在），重试
-                    if (retryCount < CONST.SYNC_RETRY_COUNT) {
-                        Utils.log('warn', `同步重试 ${retryCount+1} 次: ${record.content}`);
-                        return this.syncSingleRecord(record, retryCount + 1);
-                    } else {
-                        Utils.log('error', `同步失败（后端错误）: ${JSON.stringify(result)}`);
-                        Utils.showToast(`同步失败：${result.message || '后端服务异常'}`);
-                        return false;
-                    }
-                }
-            } catch (e) {
-                // 网络异常，重试
-                if (retryCount < CONST.SYNC_RETRY_COUNT) {
-                    Utils.log('warn', `同步重试 ${retryCount+1} 次（网络异常）: ${record.content}`);
-                    return this.syncSingleRecord(record, retryCount + 1);
-                } else {
-                    Utils.log('error', `同步失败（网络异常）: ${e.message}`);
+                    Utils.log('error', `同步失败: ${JSON.stringify(result)}`);
+                    Utils.showToast(`同步失败：${result.message || '后端服务异常'}`);
                     return false;
                 }
+            } catch (e) {
+                Utils.log('error', `同步失败（网络异常）: ${e.message}`);
+                return false;
             }
         },
 
         async autoSync() {
             if (!this.isOnline || this.isSyncing) return;
             this.isSyncing = true;
-            // 数据库删除后，强制同步所有本地记录（不管之前是否标记为已同步）
             const records = Storage.getRecords().filter(r => r.username === CONST.USERNAME);
             if (!records.length) {
                 Utils.showToast('无本地数据可同步');
@@ -425,12 +433,10 @@
         },
 
         manualSync() {
-            // 手动同步时，先检测后端是否正常
             this.checkBackendConn().then((isRealOnline) => {
                 if (isRealOnline) {
                     this.isOnline = true;
                     Utils.showLoading();
-                    // 数据库删除后，手动同步强制重置所有同步状态
                     Storage.clearAllSyncStatus();
                     this.autoSync().finally(() => {
                         Utils.hideLoading();
