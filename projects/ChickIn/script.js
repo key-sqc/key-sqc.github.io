@@ -160,20 +160,20 @@
             const today = new Date();
             this.todayDate = Utils.formatDate(today);
             this.yesterdayDate = Utils.formatDate(new Date(today - 86400000));
-            // 识别是否为GitHub Pages环境，纯本地使用
+            // 识别是否为GitHub Pages环境（仅用于前端部署，不强制离线）
             const isGithubPages = window.location.host.includes('github.io');
             
             // 1. 优先渲染日期，快速展示页面基础内容
             const dateEl = Utils.getDom('#currentDate');
             dateEl && (dateEl.textContent = Utils.formatShowDate(today));
 
-            // 2. 优先读取本地记录并渲染打卡状态，解决手机端先空白再刷新问题
+            // 2. 优先读取本地记录并渲染打卡状态
             const records = Storage.getRecords();
             this.renderBasicUI(records);
             this.renderComplexStats(records);
             this.bindEvents();
 
-            // 3. 加载弹窗仅在非Pages环境、后端检测超时时才显示，避免无意义弹窗
+            // 3. 加载弹窗仅在非Pages环境、后端检测超时时才显示
             let loadingShown = false;
             this.loadingTimer = setTimeout(() => {
                 if (!isGithubPages) {
@@ -183,20 +183,15 @@
             }, CONST.LOADING_TIMEOUT);
 
             try {
-                // Pages环境直接走纯本地，不检测后端，避免控制台报错
-                if (!isGithubPages) {
-                    this.isOnline = await this.checkBackendConn();
-                    this.checkNetworkStatus();
-                } else {
-                    this.isOnline = false;
-                }
+                // 🔥 核心修改：Pages环境也允许检测后端连接，不强制离线
+                this.isOnline = await this.checkBackendConn();
+                this.checkNetworkStatus();
 
-                // 仅本地后端连接成功时，才执行自动同步，避免无效请求
+                // 仅本地后端连接成功时，才执行自动同步
                 if (this.isOnline && !this.hasInitedSync) {
                     Utils.showToast('已连接云端，自动同步历史数据');
                     await this.autoSync();
                     this.hasInitedSync = true;
-                    // 同步完成后仅刷新一次数据，不重复渲染
                     const newRecords = Storage.getRecords(true);
                     this.renderBasicUI(newRecords);
                     this.renderComplexStats(newRecords);
@@ -210,7 +205,6 @@
                 Utils.log('error', '云端连接检测失败：', e);
                 Utils.showToast('本地模式，数据仅存设备');
             } finally {
-                // 立即清除加载定时器，显示过才关闭，避免闪弹
                 clearTimeout(this.loadingTimer);
                 if (loadingShown) {
                     Utils.hideLoading();
@@ -219,6 +213,7 @@
 
             Utils.log('log', `初始化完成，耗时 ${Date.now() - startTime}ms`);
         },
+
 
         renderBasicUI(records) {
             const todayDoneTasks = records
