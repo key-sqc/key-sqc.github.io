@@ -1,6 +1,7 @@
 /**
- * 智能打卡助手 - 修复重复同步唯一索引冲突
- * 版本：1.0.20
+ * 智能打卡助手 - 最终稳定版
+ * 版本：1.0.21
+ * 修复点：1. 取消手动同步强制重置 2. 自动同步仅处理未同步记录 3. 实时刷新本地缓存
  */
 (function(window, document) {
     'use strict';
@@ -23,7 +24,7 @@
         LOADING_TIMEOUT: 800,
         SYNC_DELAY: 500,
         FETCH_TIMEOUT: 8000,
-        SYNC_RETRY_COUNT: 2
+        SYNC_RETRY_COUNT: 1
     };
     CONST.TASK_TOTAL = CONST.TASKS.length;
 
@@ -81,18 +82,17 @@
     const Storage = {
         _cache: null,
         getRecords(forceRefresh = false) {
-            if (forceRefresh) this._cache = null;
-            if (this._cache) return [...this._cache];
-            try {
-                const key = `${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`;
-                const data = localStorage.getItem(key);
-                this._cache = data ? JSON.parse(data) : [];
-                return Array.isArray(this._cache) ? this._cache : [];
-            } catch (e) {
-                Utils.log('error', `读取存储失败: ${e.message}`);
-                this._cache = [];
-                return [];
+            if (forceRefresh || !this._cache) {
+                try {
+                    const key = `${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`;
+                    const data = localStorage.getItem(key);
+                    this._cache = data ? JSON.parse(data) : [];
+                } catch (e) {
+                    Utils.log('error', `读取存储失败: ${e.message}`);
+                    this._cache = [];
+                }
             }
+            return [...this._cache];
         },
         saveRecord(record) {
             const completeRecord = { isSynced: false, isSupplement: false, ...record };
@@ -145,6 +145,7 @@
             this._setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
         },
         clearAllSyncStatus() {
+            this.getRecords(true);
             this._cache.forEach(record => record.isSynced = false);
             this._setItem(`${ENV.STORAGE_PREFIX}records_${CONST.USERNAME}`, JSON.stringify(this._cache));
             Utils.showToast('已重置同步状态，将重新同步所有数据');
@@ -170,7 +171,7 @@
             const dateEl = Utils.getDom('#currentDate');
             dateEl && (dateEl.textContent = Utils.formatShowDate(today));
 
-            const records = Storage.getRecords();
+            const records = Storage.getRecords(true);
             this.renderBasicUI(records);
             this.renderComplexStats(records);
             this.bindEvents();
@@ -350,7 +351,6 @@
             });
         },
 
-        // 修复：同步前先检查记录是否存在，避免重复键错误
         async syncSingleRecord(record) {
             const url = record.isSupplement 
                 ? `${ENV.BASE_URL}/checkin/supplement` 
@@ -370,13 +370,17 @@
                     })
                 });
                 const checkResult = await checkRes.json();
+                if (!checkResult.success) {
+                    Utils.log('error', `检查记录失败: ${checkResult.message}`);
+                    return false;
+                }
                 if (checkResult.exists) {
-                    // 记录已存在，标记为已同步
                     Storage.updateSyncStatus(record.id);
                     return true;
                 }
             } catch (e) {
                 Utils.log('warn', `检查记录存在失败: ${e.message}`);
+                return false;
             }
 
             // 步骤2：记录不存在，执行同步
@@ -396,7 +400,7 @@
                     Storage.updateSyncStatus(record.id);
                     return true;
                 } else {
-                    Utils.log('error', `同步失败: ${JSON.stringify(result)}`);
+                    Utils.log('error', `同步失败: ${result.message || '未知错误'}`);
                     Utils.showToast(`同步失败：${result.message || '后端服务异常'}`);
                     return false;
                 }
@@ -409,9 +413,10 @@
         async autoSync() {
             if (!this.isOnline || this.isSyncing) return;
             this.isSyncing = true;
-            const records = Storage.getRecords().filter(r => r.username === CONST.USERNAME);
+            // 仅处理未同步的记录，避免重复请求
+            const records = Storage.getRecords().filter(r => !r.isSynced && r.username === CONST.USERNAME);
             if (!records.length) {
-                Utils.showToast('无本地数据可同步');
+                Utils.showToast('无未同步的本地数据');
                 this.isSyncing = false;
                 return;
             }
@@ -427,8 +432,10 @@
             } else {
                 Utils.showToast('所有数据同步失败，请检查后端服务');
             }
-            this.renderBasicUI(Storage.getRecords(true));
-            this.renderComplexStats(Storage.getRecords(true));
+            // 同步后强制刷新缓存
+            const newRecords = Storage.getRecords(true);
+            this.renderBasicUI(newRecords);
+            this.renderComplexStats(newRecords);
             this.isSyncing = false;
         },
 
@@ -437,7 +444,7 @@
                 if (isRealOnline) {
                     this.isOnline = true;
                     Utils.showLoading();
-                    Storage.clearAllSyncStatus();
+                    // 取消强制重置同步状态，仅同步未同步的记录
                     this.autoSync().finally(() => {
                         Utils.hideLoading();
                     });
