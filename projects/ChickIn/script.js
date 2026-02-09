@@ -1,7 +1,7 @@
 /**
- * 智能打卡助手 - 修复手机端加载/刷新问题
- * 版本：1.0.17
- * 修复点：1. 优化初始化时序，优先渲染本地打卡状态 2. 取消无意义加载弹窗 3. 去掉二次渲染延迟 4. 适配GitHub Pages纯本地模式
+ * 智能打卡助手 - 修复手机端同步状态问题
+ * 版本：1.0.18
+ * 修复点：1. 实时更新isOnline状态 2. 手动同步实时检测后端 3. 取消Pages环境强制离线
  */
 (function(window, document) {
     'use strict';
@@ -160,20 +160,16 @@
             const today = new Date();
             this.todayDate = Utils.formatDate(today);
             this.yesterdayDate = Utils.formatDate(new Date(today - 86400000));
-            // 识别是否为GitHub Pages环境（仅用于前端部署，不强制离线）
             const isGithubPages = window.location.host.includes('github.io');
             
-            // 1. 优先渲染日期，快速展示页面基础内容
             const dateEl = Utils.getDom('#currentDate');
             dateEl && (dateEl.textContent = Utils.formatShowDate(today));
 
-            // 2. 优先读取本地记录并渲染打卡状态
             const records = Storage.getRecords();
             this.renderBasicUI(records);
             this.renderComplexStats(records);
             this.bindEvents();
 
-            // 3. 加载弹窗仅在非Pages环境、后端检测超时时才显示
             let loadingShown = false;
             this.loadingTimer = setTimeout(() => {
                 if (!isGithubPages) {
@@ -183,11 +179,10 @@
             }, CONST.LOADING_TIMEOUT);
 
             try {
-                // 🔥 核心修改：Pages环境也允许检测后端连接，不强制离线
+                // 实时检测后端连接（不强制Pages环境离线）
                 this.isOnline = await this.checkBackendConn();
                 this.checkNetworkStatus();
 
-                // 仅本地后端连接成功时，才执行自动同步
                 if (this.isOnline && !this.hasInitedSync) {
                     Utils.showToast('已连接云端，自动同步历史数据');
                     await this.autoSync();
@@ -213,7 +208,6 @@
 
             Utils.log('log', `初始化完成，耗时 ${Date.now() - startTime}ms`);
         },
-
 
         renderBasicUI(records) {
             const todayDoneTasks = records
@@ -243,7 +237,6 @@
             this.judgeSupplementShow(records);
         },
 
-        // 去掉setTimeout延迟，解决二次渲染导致的状态闪烁
         renderComplexStats(records) {
             const stats = this.calculateStats(records);
             const streakEl = Utils.getDom('#streakNum');
@@ -309,11 +302,10 @@
 
         checkBackendConn() {
             return new Promise((resolve) => {
-                // 直接请求后端接口，成功则标记为在线
                 Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, { method: 'GET' })
                     .then(res => resolve(res.ok))
                     .catch(() => {
-                        // 即使请求失败，再重试1次（避免偶发网络波动）
+                        // 重试1次避免偶发波动
                         Utils.fetchWithTimeout(`${ENV.BASE_URL}/checkins/${CONST.USERNAME}`, { method: 'GET' })
                             .then(res => resolve(res.ok))
                             .catch(() => resolve(false));
@@ -321,10 +313,9 @@
             });
         },
 
-
         checkNetworkStatus() {
             window.addEventListener('online', () => {
-                this.isOnline = true;
+                this.isOnline = true; // 实时更新在线状态
                 const offlineTip = Utils.getDom('#offlineTip');
                 offlineTip && (offlineTip.style.display = 'none');
                 if (!this.hasInitedSync) {
@@ -338,7 +329,7 @@
             });
 
             window.addEventListener('offline', () => {
-                this.isOnline = false;
+                this.isOnline = false; // 实时更新离线状态
                 const offlineTip = Utils.getDom('#offlineTip');
                 if (offlineTip) {
                     offlineTip.style.display = 'block';
@@ -399,14 +390,18 @@
         },
 
         manualSync() {
-            if (this.isOnline) {
-                Utils.showLoading();
-                this.autoSync().finally(() => {
-                    Utils.hideLoading();
-                });
-            } else {
-                Utils.showToast('当前离线，无法同步');
-            }
+            // 手动同步时实时检测后端连接
+            this.checkBackendConn().then((isRealOnline) => {
+                if (isRealOnline) {
+                    this.isOnline = true;
+                    Utils.showLoading();
+                    this.autoSync().finally(() => {
+                        Utils.hideLoading();
+                    });
+                } else {
+                    Utils.showToast('当前离线，无法同步');
+                }
+            });
         },
 
         singleCheckin(taskId) {
@@ -521,7 +516,6 @@
         }
     };
 
-    // 页面加载完成后初始化，避免DOM未加载导致的问题
     document.addEventListener('DOMContentLoaded', () => Checkin.init());
     window.Checkin = Checkin;
     window.Utils = Utils;
