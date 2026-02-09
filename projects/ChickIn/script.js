@@ -1,6 +1,7 @@
 /**
- * 智能打卡助手 - 稳定版
- * 版本：1.0.16
+ * 智能打卡助手 - 修复手机端加载/刷新问题
+ * 版本：1.0.17
+ * 修复点：1. 优化初始化时序，优先渲染本地打卡状态 2. 取消无意义加载弹窗 3. 去掉二次渲染延迟 4. 适配GitHub Pages纯本地模式
  */
 (function(window, document) {
     'use strict';
@@ -159,38 +160,61 @@
             const today = new Date();
             this.todayDate = Utils.formatDate(today);
             this.yesterdayDate = Utils.formatDate(new Date(today - 86400000));
+            // 识别是否为GitHub Pages环境，纯本地使用
+            const isGithubPages = window.location.host.includes('github.io');
             
+            // 1. 优先渲染日期，快速展示页面基础内容
             const dateEl = Utils.getDom('#currentDate');
             dateEl && (dateEl.textContent = Utils.formatShowDate(today));
-            
-            this.loadingTimer = setTimeout(() => {
-                Utils.showLoading();
-            }, CONST.LOADING_TIMEOUT);
 
+            // 2. 优先读取本地记录并渲染打卡状态，解决手机端先空白再刷新问题
             const records = Storage.getRecords();
             this.renderBasicUI(records);
             this.renderComplexStats(records);
             this.bindEvents();
 
+            // 3. 加载弹窗仅在非Pages环境、后端检测超时时才显示，避免无意义弹窗
+            let loadingShown = false;
+            this.loadingTimer = setTimeout(() => {
+                if (!isGithubPages) {
+                    Utils.showLoading();
+                    loadingShown = true;
+                }
+            }, CONST.LOADING_TIMEOUT);
+
             try {
-                this.isOnline = await this.checkBackendConn();
-                this.checkNetworkStatus();
+                // Pages环境直接走纯本地，不检测后端，避免控制台报错
+                if (!isGithubPages) {
+                    this.isOnline = await this.checkBackendConn();
+                    this.checkNetworkStatus();
+                } else {
+                    this.isOnline = false;
+                }
+
+                // 仅本地后端连接成功时，才执行自动同步，避免无效请求
                 if (this.isOnline && !this.hasInitedSync) {
                     Utils.showToast('已连接云端，自动同步历史数据');
                     await this.autoSync();
                     this.hasInitedSync = true;
+                    // 同步完成后仅刷新一次数据，不重复渲染
+                    const newRecords = Storage.getRecords(true);
+                    this.renderBasicUI(newRecords);
+                    this.renderComplexStats(newRecords);
                 } else if (this.isOnline) {
                     Utils.showToast('云端已连接，打卡将自动同步');
                 } else {
-                    Utils.showToast('云端未连接，仅本地模式');
+                    Utils.showToast('本地模式，数据仅存设备');
                 }
             } catch (e) {
                 this.isOnline = false;
                 Utils.log('error', '云端连接检测失败：', e);
-                Utils.showToast('云端未连接，仅本地模式');
+                Utils.showToast('本地模式，数据仅存设备');
             } finally {
+                // 立即清除加载定时器，显示过才关闭，避免闪弹
                 clearTimeout(this.loadingTimer);
-                Utils.hideLoading();
+                if (loadingShown) {
+                    Utils.hideLoading();
+                }
             }
 
             Utils.log('log', `初始化完成，耗时 ${Date.now() - startTime}ms`);
@@ -224,19 +248,18 @@
             this.judgeSupplementShow(records);
         },
 
+        // 去掉setTimeout延迟，解决二次渲染导致的状态闪烁
         renderComplexStats(records) {
-            setTimeout(() => {
-                const stats = this.calculateStats(records);
-                const streakEl = Utils.getDom('#streakNum');
-                const monthFullEl = Utils.getDom('#month-full');
-                const monthCountEl = Utils.getDom('#month-count');
-                const monthRateEl = Utils.getDom('#month-rate');
-                
-                streakEl && (streakEl.textContent = stats.streak);
-                monthFullEl && (monthFullEl.textContent = stats.monthFullDays);
-                monthCountEl && (monthCountEl.textContent = stats.monthTotalCount);
-                monthRateEl && (monthRateEl.textContent = `${stats.monthRate}%`);
-            }, 0);
+            const stats = this.calculateStats(records);
+            const streakEl = Utils.getDom('#streakNum');
+            const monthFullEl = Utils.getDom('#month-full');
+            const monthCountEl = Utils.getDom('#month-count');
+            const monthRateEl = Utils.getDom('#month-rate');
+            
+            streakEl && (streakEl.textContent = stats.streak);
+            monthFullEl && (monthFullEl.textContent = stats.monthFullDays);
+            monthCountEl && (monthCountEl.textContent = stats.monthTotalCount);
+            monthRateEl && (monthRateEl.textContent = `${stats.monthRate}%`);
         },
 
         calculateStats(records) {
@@ -496,6 +519,7 @@
         }
     };
 
+    // 页面加载完成后初始化，避免DOM未加载导致的问题
     document.addEventListener('DOMContentLoaded', () => Checkin.init());
     window.Checkin = Checkin;
     window.Utils = Utils;
